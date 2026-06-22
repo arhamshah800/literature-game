@@ -13,7 +13,6 @@ export async function getPublicState(sql: SqlClient, gameId: string): Promise<un
         select jsonb_agg(
           jsonb_build_object(
             'playerId', gp.id,
-            'userId', gp.user_id,
             'displayName', p.display_name,
             'seatIndex', gp.seat_index,
             'teamIndex', gp.team_index,

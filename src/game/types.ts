@@ -99,7 +99,6 @@ export type ClaimResolution = {
 
 export type PublicPlayerState = {
   playerId: string;
-  userId: string;
   displayName: string;
   seatIndex: number;
   teamIndex: TeamIndex;

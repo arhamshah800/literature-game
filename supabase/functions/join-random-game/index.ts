@@ -4,8 +4,7 @@ import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_sh
 import { teamForSeat } from "../_shared/lobby.ts";
 import { ensureProfile, getPublicState } from "../_shared/state.ts";
 
-type JoinGameRequest = {
-  lobbyCode: string;
+type JoinRandomGameRequest = {
   displayName?: string;
 };
 
@@ -14,36 +13,45 @@ Deno.serve(async (request) => {
   if (options) return options;
 
   const sql = createSqlClient();
-  let requestBody: JoinGameRequest | null = null;
+  let requestBody: JoinRandomGameRequest | null = null;
   let userId: string | null = null;
+  let gameId: string | null = null;
 
   try {
     const user = await requireUser(request);
     userId = user.id;
-    requestBody = await readJsonBody<JoinGameRequest>(request);
-    const lobbyCode = requestBody.lobbyCode?.trim().toUpperCase();
-    if (!lobbyCode) {
-      throw new Error("lobbyCode is required.");
-    }
-
-    const displayName = requestBody.displayName?.trim() || user.email || "Player";
+    requestBody = await readJsonBody<JoinRandomGameRequest>(request);
+    const displayName = requestBody.displayName?.trim() || "Player";
 
     const result = await sql.begin(async (tx) => {
       await ensureProfile(tx, { userId: user.id, displayName });
 
+      const candidates = await tx`
+        select g.id
+        from public.games g
+        left join public.game_players gp on gp.game_id = g.id
+        where g.status = 'waiting'
+        group by g.id
+        having count(gp.id)::int < g.player_count
+        order by random()
+        limit 1
+      `;
+      const candidate = candidates[0];
+      if (!candidate) {
+        throw new Error("No open rooms are available right now.");
+      }
+
       const games = await tx`
         select *
         from public.games
-        where lobby_code = ${lobbyCode}
+        where id = ${candidate.id}
         for update
       `;
       const game = games[0];
-      if (!game) {
-        throw new Error("No waiting game exists for that lobby code.");
+      if (!game || game.status !== "waiting") {
+        throw new Error("The selected room is no longer available. Try again.");
       }
-      if (game.status !== "waiting") {
-        throw new Error("This game has already started.");
-      }
+      gameId = game.id;
 
       const existing = await tx`
         select id, seat_index, team_index
@@ -68,7 +76,7 @@ Deno.serve(async (request) => {
       `;
       const currentCount = Number(countRows[0].count);
       if (currentCount >= Number(game.player_count)) {
-        throw new Error("This game is already full.");
+        throw new Error("The selected room just filled up. Try again.");
       }
 
       const seatIndex = currentCount;
@@ -112,7 +120,7 @@ Deno.serve(async (request) => {
         gameId: game.id,
         userId: user.id,
         playerId: players[0].id,
-        actionType: "join_game",
+        actionType: "join_random_game",
         requestPayload: requestBody,
         responsePayload,
         success: true
@@ -126,10 +134,10 @@ Deno.serve(async (request) => {
     if (userId) {
       try {
         await logAction(sql, {
-          gameId: null,
+          gameId,
           userId,
           playerId: null,
-          actionType: "join_game",
+          actionType: "join_random_game",
           requestPayload: requestBody ?? {},
           success: false,
           errorMessage: error instanceof Error ? error.message : "Unknown error"

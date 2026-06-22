@@ -9,7 +9,6 @@ import {
   DoorOpen,
   Hand,
   Loader2,
-  LogOut,
   Play,
   RefreshCw,
   Shuffle,
@@ -45,6 +44,7 @@ type BusyAction =
   | "auth"
   | "create"
   | "join"
+  | "joinRandom"
   | "load"
   | "start"
   | "randomize"
@@ -77,7 +77,6 @@ const teamNames: Record<TeamIndex, string> = {
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [displayName, setDisplayName] = useState(() => localStorage.getItem(storedNameKey) ?? "");
-  const [email, setEmail] = useState("");
   const [gameId, setGameId] = useState(() => localStorage.getItem(storedGameIdKey) ?? "");
   const [playerId, setPlayerId] = useState(() => localStorage.getItem(storedPlayerIdKey) ?? "");
   const [state, setState] = useState<PublicGameState | null>(null);
@@ -95,8 +94,8 @@ function App() {
     () => state?.players.find((player) => player.playerId === playerId) ?? null,
     [playerId, state]
   );
-  const hostUserId = state?.players.find((player) => player.seatIndex === 0)?.userId;
-  const isHost = Boolean(session?.user.id && hostUserId === session.user.id);
+  const hostPlayerId = state?.players.find((player) => player.seatIndex === 0)?.playerId;
+  const isHost = Boolean(playerId && hostPlayerId === playerId);
   const canStart = Boolean(state && isHost && state.players.length === state.playerCount && state.status === "waiting");
   const isMyTurn = Boolean(state?.currentTurnPlayerId && state.currentTurnPlayerId === playerId);
 
@@ -161,40 +160,64 @@ function App() {
 
   useEffect(() => {
     if (!session || !gameId) return;
-    const channel = supabase
-      .channel(`literature:${gameId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "game_events", filter: `game_id=eq.${gameId}` },
-        (payload) => {
-          const nextEvent = payload.new as GameEventRow;
-          setEvents((current) => [nextEvent, ...current.filter((event) => event.id !== nextEvent.id)].slice(0, 80));
-          void refreshGame(gameId);
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+    void (async () => {
+      await supabase.realtime.setAuth();
+      if (cancelled) return;
+      channel = supabase
+        .channel(`game:${gameId}`, { config: { private: true } })
+        .on(
+          "broadcast",
+          { event: "*" },
+          () => {
+            void refreshGame(gameId);
+            void loadEvents(gameId);
+          }
+        )
+        .subscribe();
+    })();
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
     };
-  }, [gameId, refreshGame, session]);
+  }, [gameId, loadEvents, refreshGame, session]);
 
-  async function signInGuest() {
-    await run("auth", async () => {
-      localStorage.setItem(storedNameKey, displayName.trim() || "Guest");
-      const { error: responseError } = await supabase.auth.signInAnonymously();
-      if (responseError) throw responseError;
-    });
+  async function ensureAnonymousSession() {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      setSession(data.session);
+      return data.session;
+    }
+
+    const { data: signInData, error: responseError } = await supabase.auth.signInAnonymously();
+    if (responseError) throw responseError;
+    if (!signInData.session) {
+      throw new Error("Could not start a guest session.");
+    }
+    setSession(signInData.session);
+    return signInData.session;
   }
 
-  async function sendMagicLink() {
+  async function preparePlayer() {
+    const name = displayName.trim();
+    if (!name) {
+      throw new Error("Enter your name first.");
+    }
+    localStorage.setItem(storedNameKey, name);
+    await ensureAnonymousSession();
+    return name;
+  }
+
+  async function resetGuest() {
     await run("auth", async () => {
-      localStorage.setItem(storedNameKey, displayName.trim() || "Player");
-      const { error: responseError } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.origin }
-      });
+      leaveLocalGame();
+      localStorage.removeItem(storedNameKey);
+      setDisplayName("");
+      await supabase.auth.signOut();
+      const { data: signInData, error: responseError } = await supabase.auth.signInAnonymously();
       if (responseError) throw responseError;
-      setError("Magic link sent. Check your inbox.");
+      setSession(signInData.session);
     });
   }
 
@@ -207,9 +230,10 @@ function App() {
 
   async function createGame() {
     await run("create", async () => {
+      const name = await preparePlayer();
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("create-game", {
         playerCount,
-        displayName: displayName.trim() || "Player"
+        displayName: name
       });
       setGameId(result.gameId);
       setPlayerId(result.playerId);
@@ -217,23 +241,38 @@ function App() {
       setHand(null);
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
-      localStorage.setItem(storedNameKey, displayName.trim() || "Player");
       await loadEvents(result.gameId);
     });
   }
 
   async function joinGame() {
     await run("join", async () => {
+      const name = await preparePlayer();
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("join-game", {
         lobbyCode: joinCode,
-        displayName: displayName.trim() || "Player"
+        displayName: name
       });
       setGameId(result.gameId);
       setPlayerId(result.playerId);
       setState(result.state);
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
-      localStorage.setItem(storedNameKey, displayName.trim() || "Player");
+      await loadEvents(result.gameId);
+    });
+  }
+
+  async function joinRandomGame() {
+    await run("joinRandom", async () => {
+      const name = await preparePlayer();
+      const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("join-random-game", {
+        displayName: name
+      });
+      setGameId(result.gameId);
+      setPlayerId(result.playerId);
+      setState(result.state);
+      setHand(null);
+      localStorage.setItem(storedGameIdKey, result.gameId);
+      localStorage.setItem(storedPlayerIdKey, result.playerId);
       await loadEvents(result.gameId);
     });
   }
@@ -269,34 +308,6 @@ function App() {
     return <Shell error="Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before running the client." />;
   }
 
-  if (!session) {
-    return (
-      <Shell error={error}>
-        <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-4 py-10">
-          <div className="panel rounded-lg p-6 sm:p-8">
-            <div className="mb-8">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-clay">Literature</p>
-              <h1 className="mt-3 text-4xl font-semibold text-ink">Take a seat.</h1>
-            </div>
-            <div className="grid gap-3">
-              <input className="control" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Display name" />
-              <button className="primary-button" onClick={signInGuest} disabled={busyAction === "auth"}>
-                {busyAction === "auth" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-                Continue
-              </button>
-              <div className="my-2 h-px bg-bark/10" />
-              <input className="control" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" />
-              <button className="secondary-button" onClick={sendMagicLink} disabled={!email || busyAction === "auth"}>
-                <ArrowRight className="h-4 w-4" />
-                Email link
-              </button>
-            </div>
-          </div>
-        </section>
-      </Shell>
-    );
-  }
-
   return (
     <Shell error={error}>
       <header className="sticky top-0 z-30 border-b border-bark/10 bg-oat/85 backdrop-blur">
@@ -316,8 +327,8 @@ function App() {
                 <RefreshCw className="h-4 w-4" />
               </button>
             ) : null}
-            <button className="icon-button" onClick={() => void supabase.auth.signOut()} title="Sign out">
-              <LogOut className="h-4 w-4" />
+            <button className="secondary-button hidden sm:inline-flex" onClick={() => void resetGuest()} title="Reset guest">
+              New player
             </button>
           </div>
         </div>
@@ -334,6 +345,7 @@ function App() {
           onCreate={() => void createGame()}
           onDisplayName={setDisplayName}
           onJoin={() => void joinGame()}
+          onJoinRandom={() => void joinRandomGame()}
           onJoinCode={setJoinCode}
           onPlayerCount={setPlayerCount}
           onRandomize={() => void randomizeTeams()}
@@ -407,6 +419,7 @@ function LobbyView(props: {
   onCreate: () => void;
   onDisplayName: (value: string) => void;
   onJoin: () => void;
+  onJoinRandom: () => void;
   onJoinCode: (value: string) => void;
   onPlayerCount: (value: PlayerCount) => void;
   onRandomize: () => void;
@@ -420,34 +433,49 @@ function LobbyView(props: {
           <h2 className="text-xl font-semibold text-ink">Lobby</h2>
           {props.state ? <LobbyCode code={props.state.lobbyCode} /> : null}
         </div>
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           <input className="control" value={props.displayName} onChange={(event) => props.onDisplayName(event.target.value)} placeholder="Display name" />
-          <div className="grid grid-cols-5 gap-2">
-            {playerCountOptions.map((count) => (
-              <button
-                key={count}
-                className={`h-10 rounded-md border text-sm font-semibold transition ${
-                  props.playerCount === count ? "border-ink bg-ink text-linen" : "border-bark/15 bg-linen text-ink hover:border-clay/50"
-                }`}
-                onClick={() => props.onPlayerCount(count)}
-              >
-                {count}
-              </button>
-            ))}
+          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">Create a room</h3>
+              <span className="text-xs font-semibold text-bark">{props.playerCount} players</span>
+            </div>
+            <div className="mb-3 grid grid-cols-5 gap-2">
+              {playerCountOptions.map((count) => (
+                <button
+                  key={count}
+                  className={`h-10 rounded-md border text-sm font-semibold transition ${
+                    props.playerCount === count ? "border-ink bg-ink text-linen" : "border-bark/15 bg-linen text-ink hover:border-clay/50"
+                  }`}
+                  onClick={() => props.onPlayerCount(count)}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+            <button className="primary-button w-full" onClick={props.onCreate} disabled={!props.displayName.trim() || props.busyAction === "create"}>
+              {props.busyAction === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DoorOpen className="h-4 w-4" />}
+              Create room
+            </button>
           </div>
-          <button className="primary-button" onClick={props.onCreate} disabled={props.busyAction === "create"}>
-            {props.busyAction === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DoorOpen className="h-4 w-4" />}
-            New room
-          </button>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <input
-              className="control uppercase"
-              value={props.joinCode}
-              onChange={(event) => props.onJoinCode(event.target.value.toUpperCase())}
-              placeholder="Join code"
-            />
-            <button className="secondary-button px-3" onClick={props.onJoin} disabled={!props.joinCode || props.busyAction === "join"}>
-              <ArrowRight className="h-4 w-4" />
+          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
+            <h3 className="mb-3 text-sm font-bold text-ink">Join a game</h3>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                className="control uppercase"
+                value={props.joinCode}
+                onChange={(event) => props.onJoinCode(event.target.value.toUpperCase())}
+                placeholder="Join code"
+              />
+              <button className="secondary-button px-3" onClick={props.onJoin} disabled={!props.displayName.trim() || !props.joinCode || props.busyAction === "join"}>
+                {props.busyAction === "join" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
+            <button className="secondary-button w-full" onClick={props.onJoinRandom} disabled={!props.displayName.trim() || props.busyAction === "joinRandom"}>
+              {props.busyAction === "joinRandom" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+              Join random game
             </button>
           </div>
         </div>

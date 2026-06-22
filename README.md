@@ -8,7 +8,7 @@ The intended production stack is:
 
 - **TypeScript** for all application and game logic.
 - **Vercel** for the web frontend.
-- **Supabase Auth** for user identity.
+- **Supabase anonymous guest sessions** for room membership without visible login.
 - **Supabase Postgres** for authoritative game state.
 - **Supabase Realtime** for instant state updates.
 - **Supabase Edge Functions** for authenticated game mutations.
@@ -33,6 +33,7 @@ supabase/
     _shared/       Auth, database, HTTP, lobby, and state helpers.
     create-game/   Create a lobby and host seat.
     join-game/     Join an existing lobby by code.
+    join-random-game/ Join any waiting room with open seats.
     start-game/    Server-side shuffle, deal, and start.
     ask-card/      Authoritative card ask endpoint.
     randomize-teams/ Host-only team randomization before start.
@@ -325,7 +326,7 @@ supabase/functions/
 
 They are written in TypeScript and use:
 
-- Supabase Auth token verification.
+- Supabase anonymous session token verification.
 - Direct Postgres transactions through `postgres`.
 - Shared pure game logic from `src/game`.
 - Sanitized event writes to `game_events`.
@@ -636,6 +637,7 @@ Deploy functions:
 ```bash
 supabase functions deploy create-game
 supabase functions deploy join-game
+supabase functions deploy join-random-game
 supabase functions deploy start-game
 supabase functions deploy ask-card
 supabase functions deploy randomize-teams
@@ -676,6 +678,36 @@ The UI can show:
 - Public claim results.
 - The authenticated player's own hand.
 
+## Security Contract
+
+Players use anonymous Supabase sessions, but those sessions are only identity tokens for room membership. The product has no visible login, email flow, statistics, or profile browsing.
+
+The browser may directly read only:
+
+- Sanitized `game_events` for rooms where the current anonymous user is seated.
+- Public state and the current player's own hand through backend functions.
+
+The browser must not directly read:
+
+- `game_cards`.
+- `games`.
+- `game_players`.
+- `book_results`.
+- `profiles`.
+- `action_log`.
+
+The browser must never write directly to game tables. All game mutations must go through JWT-protected Edge Functions:
+
+- `create-game`
+- `join-game`
+- `join-random-game`
+- `start-game`
+- `ask-card`
+- `randomize-teams`
+- `submit-claim`
+
+Client-visible state intentionally excludes Supabase auth user IDs. Player identity in the room is represented by game-scoped `playerId` plus `displayName`.
+
 The UI must not assume:
 
 - Opponent card locations.
@@ -698,9 +730,9 @@ This codebase follows these principles:
 
 ## Known Product Decision
 
-The only intentionally documented house-rule decision is 8-player dealing.
+The intentionally documented house-rule decision is round-robin dealing for 4 to 8 players.
 
-Current policy:
+Current 8-player policy:
 
 ```txt
 7, 7, 7, 7, 7, 7, 6, 6

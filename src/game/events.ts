@@ -11,7 +11,6 @@ export type GameEvent<TPayload> = {
 
 export type PlayerJoinedPayload = {
   playerId: string;
-  userId: string;
   displayName: string;
   seatIndex: number;
   teamIndex: TeamIndex;

@@ -84,7 +84,6 @@ Deno.serve(async (request) => {
         actorPlayerId: players[0].id,
         payload: {
           playerId: players[0].id,
-          userId: user.id,
           displayName,
           seatIndex: players[0].seat_index,
           teamIndex: players[0].team_index

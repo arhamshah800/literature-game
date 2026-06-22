@@ -251,21 +251,10 @@ as $$
   limit 1;
 $$;
 
-create policy "profiles are readable by authenticated users"
+create policy "users can read only their own profile"
 on public.profiles for select
 to authenticated
-using (true);
-
-create policy "users can insert their own profile"
-on public.profiles for insert
-to authenticated
-with check (id = auth.uid());
-
-create policy "users can update their own profile"
-on public.profiles for update
-to authenticated
-using (id = auth.uid())
-with check (id = auth.uid());
+using (id = auth.uid());
 
 create policy "members can read their games"
 on public.games for select
@@ -332,7 +321,6 @@ as $$
       select jsonb_agg(
         jsonb_build_object(
           'playerId', gp.id,
-          'userId', gp.user_id,
           'displayName', p.display_name,
           'seatIndex', gp.seat_index,
           'teamIndex', gp.team_index,
@@ -413,13 +401,22 @@ as $$
     and gc.holder_player_id = public.current_game_player_id(target_game_id);
 $$;
 
+revoke all on public.profiles from anon, authenticated;
+revoke all on public.games from anon, authenticated;
+revoke all on public.game_players from anon, authenticated;
+revoke all on public.card_catalog from anon, authenticated;
 revoke all on public.game_cards from anon, authenticated;
-grant select on public.card_catalog to authenticated;
-grant select on public.games to authenticated;
-grant select on public.game_players to authenticated;
-grant select on public.game_cards to authenticated;
-grant select on public.book_results to authenticated;
+revoke all on public.book_results from anon, authenticated;
+revoke all on public.game_events from anon, authenticated;
+revoke all on public.action_log from anon, authenticated;
+revoke all on public.public_game_player_card_counts from anon, authenticated;
+revoke execute on function public.is_game_member(uuid) from public;
+revoke execute on function public.current_game_player_id(uuid) from public;
+revoke execute on function public.get_public_game_state(uuid) from public;
+revoke execute on function public.get_my_hand(uuid) from public;
 grant select on public.game_events to authenticated;
+grant execute on function public.is_game_member(uuid) to authenticated;
+grant execute on function public.current_game_player_id(uuid) to authenticated;
 grant execute on function public.get_public_game_state(uuid) to authenticated;
 grant execute on function public.get_my_hand(uuid) to authenticated;
 

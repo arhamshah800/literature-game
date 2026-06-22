@@ -1,0 +1,23 @@
+[functions.ask-card]
+verify_jwt = true
+
+[functions.create-game]
+verify_jwt = true
+
+[functions.get-game-state]
+verify_jwt = true
+
+[functions.join-game]
+verify_jwt = true
+
+[functions.join-random-game]
+verify_jwt = true
+
+[functions.randomize-teams]
+verify_jwt = true
+
+[functions.start-game]
+verify_jwt = true
+
+[functions.submit-claim]
+verify_jwt = true
