@@ -7,6 +7,9 @@ verify_jwt = true
 [functions.get-game-state]
 verify_jwt = true
 
+[functions.heartbeat]
+verify_jwt = true
+
 [functions.join-game]
 verify_jwt = true
 

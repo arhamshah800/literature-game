@@ -204,6 +204,49 @@ function App() {
     };
   }, [gameId, loadEvents, refreshGame, session]);
 
+  useEffect(() => {
+    if (!session || !gameId) return;
+    let cancelled = false;
+
+    const sendHeartbeat = async () => {
+      const { error: responseError } = await supabase.functions.invoke("heartbeat", {
+        body: { gameId }
+      });
+      if (cancelled || !responseError) return;
+
+      const context = responseError.context as { json?: () => Promise<unknown> } | undefined;
+      if (!context?.json) return;
+
+      try {
+        const body = await context.json();
+        if (body && typeof body === "object" && "error" in body && body.error === "You are not seated in this game.") {
+          leaveLocalGame();
+        }
+      } catch {
+        // A heartbeat should never interrupt play for a transient network issue.
+      }
+    };
+
+    const heartbeatId = window.setInterval(() => {
+      void sendHeartbeat();
+    }, 20_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void sendHeartbeat();
+      }
+    };
+
+    void sendHeartbeat();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(heartbeatId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [gameId, session]);
+
   async function ensureAnonymousSession() {
     const { data } = await supabase.auth.getSession();
     if (data.session) {
