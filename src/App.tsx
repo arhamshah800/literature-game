@@ -244,7 +244,28 @@ function App() {
 
   async function invokeGameFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
     const { data, error: responseError } = await supabase.functions.invoke<T>(name, { body });
-    if (responseError) throw responseError;
+    if (responseError) {
+      const context = responseError.context as { json?: () => Promise<unknown>; text?: () => Promise<string> } | undefined;
+      if (context?.json) {
+        try {
+          const body = await context.json();
+          if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
+            throw new Error(body.error);
+          }
+        } catch (caught) {
+          if (caught instanceof Error && caught.message !== "Body is unusable") throw caught;
+        }
+      }
+      if (context?.text) {
+        try {
+          const text = await context.text();
+          if (text) throw new Error(text);
+        } catch (caught) {
+          if (caught instanceof Error && caught.message !== "Body is unusable") throw caught;
+        }
+      }
+      throw responseError;
+    }
     if (!data) throw new Error("No response returned.");
     return data;
   }

@@ -1,11 +1,11 @@
-import { getCardsForBook } from "./cards";
+import { getCardsForBook } from "./cards.ts";
 import type {
   CardCode,
   ClaimResolution,
   ClaimResolutionInput,
   HeldCard,
   TeamIndex
-} from "./types";
+} from "./types.ts";
 
 export function resolveClaim(input: ClaimResolutionInput): ClaimResolution {
   const expectedCards = getCardsForBook(input.bookCode);

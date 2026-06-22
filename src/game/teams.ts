@@ -1,4 +1,4 @@
-import type { TeamIndex } from "./types";
+import type { TeamIndex } from "./types.ts";
 
 export type TeamAssignment = {
   playerId: string;

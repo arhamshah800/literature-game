@@ -40,13 +40,13 @@ export async function insertGameEvent(
   await sql`
     select realtime.send(
       jsonb_build_object(
-        'gameId', ${input.gameId},
-        'version', ${input.version},
-        'event', ${input.eventType},
-        'payload', ${sql.json(input.payload)}
+        'gameId', ${input.gameId}::uuid,
+        'version', ${input.version}::bigint,
+        'event', ${input.eventType}::text,
+        'payload', ${sql.json(input.payload)}::jsonb
       ),
-      ${input.eventType},
-      'game:' || ${input.gameId}::text,
+      ${input.eventType}::text,
+      'game:' || ${input.gameId}::uuid::text,
       true
     )
   `;

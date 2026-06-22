@@ -1,4 +1,4 @@
-import type { BookCode, CardCode, ClaimResult, PlayerCount, TeamIndex } from "./types";
+import type { BookCode, CardCode, ClaimResult, PlayerCount, TeamIndex } from "./types.ts";
 
 export type GameEvent<TPayload> = {
   gameId: string;

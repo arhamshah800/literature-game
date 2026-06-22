@@ -1,4 +1,4 @@
-import type { BookCode, CardCode, CardDefinition, Suit } from "./types";
+import type { BookCode, CardCode, CardDefinition, Suit } from "./types.ts";
 
 const SUITS = [
   ["clubs", "C"],

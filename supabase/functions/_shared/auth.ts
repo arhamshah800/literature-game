@@ -12,9 +12,14 @@ export async function requireUser(request: Request): Promise<AuthenticatedUser> 
     throw new Error("Missing Authorization header.");
   }
 
+  const publishableKeys = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  const anonKey = publishableKeys
+    ? JSON.parse(publishableKeys).default
+    : requireEnv("SUPABASE_ANON_KEY");
+
   const supabase = createClient(
     requireEnv("SUPABASE_URL"),
-    requireEnv("SUPABASE_ANON_KEY"),
+    anonKey,
     {
       global: {
         headers: {

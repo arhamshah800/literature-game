@@ -1,5 +1,5 @@
-import { CARD_CATALOG } from "./cards";
-import type { CardCode, PlayerCount } from "./types";
+import { CARD_CATALOG } from "./cards.ts";
+import type { CardCode, PlayerCount } from "./types.ts";
 
 export type DealtCard = {
   playerId: string;

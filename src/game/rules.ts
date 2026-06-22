@@ -1,5 +1,5 @@
-import { getBookForCard } from "./cards";
-import type { AskValidationInput, AskValidationResult, HeldCard } from "./types";
+import { getBookForCard } from "./cards.ts";
+import type { AskValidationInput, AskValidationResult, HeldCard } from "./types.ts";
 
 export function validateAsk(input: AskValidationInput): AskValidationResult {
   if (input.asker.playerId === input.target.playerId) {
