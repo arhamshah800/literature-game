@@ -8,7 +8,12 @@ type AskCardRequest = {
   gameId: string;
   targetPlayerId: string;
   cardCode: string;
+  requestId?: string;
 };
+
+function isUuid(value: string | undefined): value is string {
+  return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+}
 
 Deno.serve(async (request) => {
   const options = handleOptions(request);
@@ -30,6 +35,9 @@ Deno.serve(async (request) => {
     if (!isCardCode(requestBody.cardCode)) {
       throw new Error("cardCode is not a valid card in the Literature deck.");
     }
+    if (requestBody.requestId && !isUuid(requestBody.requestId)) {
+      throw new Error("requestId must be a valid UUID.");
+    }
 
     const result = await sql.begin(async (tx) => {
       const playerRows = await tx`
@@ -39,6 +47,28 @@ Deno.serve(async (request) => {
           and user_id = ${user.id}
       `;
       playerId = playerRows[0]?.id ?? null;
+
+      if (requestBody!.requestId) {
+        await tx`select pg_advisory_xact_lock(hashtextextended(${requestBody!.requestId}, 0))`;
+
+        const replayRows = await tx`
+          select response_payload
+          from public.action_log
+          where game_id = ${requestBody!.gameId}
+            and user_id = ${user.id}
+            and request_id = ${requestBody!.requestId}
+            and action_type = 'ask_card'
+            and success = true
+          limit 1
+        `;
+        if (replayRows[0]?.response_payload) {
+          return {
+            ...replayRows[0].response_payload,
+            state: await getPublicState(tx, requestBody!.gameId),
+            myHand: await getMyHand(tx, { gameId: requestBody!.gameId, userId: user.id })
+          };
+        }
+      }
 
       const rpcRows = await tx`
         select game_private.process_card_ask(
@@ -56,6 +86,19 @@ Deno.serve(async (request) => {
         myHand: await getMyHand(tx, { gameId: requestBody!.gameId, userId: user.id })
       };
 
+      if (requestBody!.requestId) {
+        await logAction(tx, {
+          gameId: requestBody!.gameId,
+          userId: user.id,
+          playerId,
+          actionType: "ask_card",
+          requestId: requestBody!.requestId,
+          requestPayload: requestBody,
+          responsePayload: responsePayload,
+          success: true
+        });
+      }
+
       return responsePayload;
     });
 
@@ -68,6 +111,7 @@ Deno.serve(async (request) => {
           userId,
           playerId,
           actionType: "ask_card",
+          requestId: requestBody?.requestId ?? null,
           requestPayload: requestBody ?? {},
           success: false,
           errorMessage: error instanceof Error ? error.message : "Unknown error"

@@ -57,6 +57,27 @@ const storedPlayerIdKey = "literature.playerId";
 const storedNameKey = "literature.displayName";
 const playerCountOptions = [4, 5, 6, 7, 8] as const;
 
+function hashRequestKey(value: string) {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function pendingRequestKey(action: "ask" | "claim", gameId: string, fingerprint: string) {
+  return `literature.pending.${action}.${gameId}.${hashRequestKey(fingerprint)}`;
+}
+
+function getOrCreateRequestId(storageKey: string) {
+  const existing = localStorage.getItem(storageKey);
+  if (existing) return existing;
+
+  const requestId = crypto.randomUUID();
+  localStorage.setItem(storageKey, requestId);
+  return requestId;
+}
+
 const bookLabels: Record<BookCode, string> = {
   clubs_low: "Clubs Low",
   clubs_high: "Clubs High",
@@ -364,11 +385,15 @@ function App() {
           onAsk={async (targetPlayerId, cardCode) => {
             if (!state) return;
             await run("ask", async () => {
+              const storageKey = pendingRequestKey("ask", state.gameId, `${targetPlayerId}:${cardCode}`);
+              const requestId = getOrCreateRequestId(storageKey);
               const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("ask-card", {
                 gameId: state.gameId,
                 targetPlayerId,
-                cardCode
+                cardCode,
+                requestId
               });
+              localStorage.removeItem(storageKey);
               setState(result.state);
               setHand(result.myHand);
               setAskOpen(false);
@@ -378,11 +403,15 @@ function App() {
           onClaim={async (bookCode, assignments) => {
             if (!state) return;
             await run("claim", async () => {
+              const storageKey = pendingRequestKey("claim", state.gameId, JSON.stringify({ bookCode, assignments }));
+              const requestId = getOrCreateRequestId(storageKey);
               const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("submit-claim", {
                 gameId: state.gameId,
                 bookCode,
-                assignments
+                assignments,
+                requestId
               });
+              localStorage.removeItem(storageKey);
               setState(result.state);
               setHand(result.myHand);
               setClaimOpen(false);

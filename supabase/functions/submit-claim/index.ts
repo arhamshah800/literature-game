@@ -9,7 +9,12 @@ type SubmitClaimRequest = {
   gameId: string;
   bookCode: string;
   assignments: ClaimAssignment[];
+  requestId?: string;
 };
+
+function isUuid(value: string | undefined): value is string {
+  return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+}
 
 Deno.serve(async (request) => {
   const options = handleOptions(request);
@@ -31,6 +36,9 @@ Deno.serve(async (request) => {
     if (!isBookCode(requestBody.bookCode)) {
       throw new Error("bookCode is not a valid Literature book.");
     }
+    if (requestBody.requestId && !isUuid(requestBody.requestId)) {
+      throw new Error("requestId must be a valid UUID.");
+    }
     for (const assignment of requestBody.assignments) {
       if (!isCardCode(assignment.cardCode)) {
         throw new Error(`Invalid card in claim assignment: ${assignment.cardCode}`);
@@ -48,6 +56,28 @@ Deno.serve(async (request) => {
           and user_id = ${user.id}
       `;
       playerId = playerRows[0]?.id ?? null;
+
+      if (requestBody!.requestId) {
+        await tx`select pg_advisory_xact_lock(hashtextextended(${requestBody!.requestId}, 0))`;
+
+        const replayRows = await tx`
+          select response_payload
+          from public.action_log
+          where game_id = ${requestBody!.gameId}
+            and user_id = ${user.id}
+            and request_id = ${requestBody!.requestId}
+            and action_type = 'submit_claim'
+            and success = true
+          limit 1
+        `;
+        if (replayRows[0]?.response_payload) {
+          return {
+            ...replayRows[0].response_payload,
+            state: await getPublicState(tx, requestBody!.gameId),
+            myHand: await getMyHand(tx, { gameId: requestBody!.gameId, userId: user.id })
+          };
+        }
+      }
 
       const rpcRows = await tx`
         with assignment_array as (
@@ -72,6 +102,19 @@ Deno.serve(async (request) => {
         myHand: await getMyHand(tx, { gameId: requestBody!.gameId, userId: user.id })
       };
 
+      if (requestBody!.requestId) {
+        await logAction(tx, {
+          gameId: requestBody!.gameId,
+          userId: user.id,
+          playerId,
+          actionType: "submit_claim",
+          requestId: requestBody!.requestId,
+          requestPayload: requestBody,
+          responsePayload: responsePayload,
+          success: true
+        });
+      }
+
       return responsePayload;
     });
 
@@ -84,6 +127,7 @@ Deno.serve(async (request) => {
           userId,
           playerId,
           actionType: "submit_claim",
+          requestId: requestBody?.requestId ?? null,
           requestPayload: requestBody ?? {},
           success: false,
           errorMessage: error instanceof Error ? error.message : "Unknown error"

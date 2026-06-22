@@ -47,6 +47,7 @@ export async function logAction(
     actionType: string;
     requestPayload: unknown;
     responsePayload?: unknown;
+    requestId?: string | null;
     success: boolean;
     errorMessage?: string;
   }
@@ -57,6 +58,7 @@ export async function logAction(
       user_id,
       player_id,
       action_type,
+      request_id,
       request_payload,
       response_payload,
       success,
@@ -67,6 +69,7 @@ export async function logAction(
       ${input.userId},
       ${input.playerId},
       ${input.actionType},
+      ${input.requestId ?? null},
       ${sql.json(input.requestPayload)},
       ${input.responsePayload === undefined ? null : sql.json(input.responsePayload)},
       ${input.success},
