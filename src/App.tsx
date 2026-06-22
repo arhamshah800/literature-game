@@ -595,7 +595,7 @@ function GameBoard(props: {
             <Hand className="h-4 w-4" />
             Ask
           </button>
-          <button className="secondary-button" onClick={() => props.onClaimOpen(true)} disabled={props.busyAction === "claim"}>
+          <button className="secondary-button" onClick={() => props.onClaimOpen(true)} disabled={!props.isMyTurn || props.busyAction === "claim"}>
             <Check className="h-4 w-4" />
             Claim
           </button>
@@ -648,7 +648,7 @@ function AskModal(props: {
     [bookCode, heldCodes]
   );
   const [cardCode, setCardCode] = useState<CardCode | "">((cards[0] as CardCode | undefined) ?? "");
-  const opponents = props.state.players.filter((player) => props.me && player.teamIndex !== props.me.teamIndex);
+  const opponents = props.state.players.filter((player) => props.me && player.teamIndex !== props.me.teamIndex && player.cardCount > 0);
   const [targetPlayerId, setTargetPlayerId] = useState(opponents[0]?.playerId ?? "");
 
   useEffect(() => {

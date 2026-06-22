@@ -10,6 +10,10 @@ export function validateAsk(input: AskValidationInput): AskValidationResult {
     return { ok: false, reason: "A player must ask a member of the opposing team." };
   }
 
+  if (input.targetCardCount !== undefined && input.targetCardCount <= 0) {
+    return { ok: false, reason: "The opponent being asked must still have cards." };
+  }
+
   const requestedBookCode = getBookForCard(input.requestedCard);
   if (!requestedBookCode) {
     return { ok: false, reason: "The requested card does not exist in the 54-card Literature deck." };

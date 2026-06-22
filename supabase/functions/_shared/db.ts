@@ -36,6 +36,20 @@ export async function insertGameEvent(
       ${sql.json(input.payload)}
     )
   `;
+
+  await sql`
+    select realtime.send(
+      jsonb_build_object(
+        'gameId', ${input.gameId},
+        'version', ${input.version},
+        'event', ${input.eventType},
+        'payload', ${sql.json(input.payload)}
+      ),
+      ${input.eventType},
+      'game:' || ${input.gameId}::text,
+      true
+    )
+  `;
 }
 
 export async function logAction(

@@ -61,6 +61,19 @@ describe("ask validation", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("rejects asking an opponent who has no cards", () => {
+    const result = validateAsk({
+      asker,
+      target,
+      targetCardCount: 0,
+      requestedCard: "4C",
+      askerHand: [{ cardCode: "2C", bookCode: "clubs_low", holderPlayerId: "p1" }],
+      claimedOrCancelledBookCodes: new Set()
+    });
+
+    expect(result).toEqual({ ok: false, reason: "The opponent being asked must still have cards." });
+  });
+
   it("allows the special 8s and Jokers book under the same rule", () => {
     const result = validateAsk({
       asker,

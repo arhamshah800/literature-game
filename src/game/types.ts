@@ -69,6 +69,7 @@ export type HeldCard = {
 export type AskValidationInput = {
   asker: PlayerRef;
   target: PlayerRef;
+  targetCardCount?: number;
   requestedCard: CardCode;
   askerHand: HeldCard[];
   claimedOrCancelledBookCodes: Set<BookCode>;
