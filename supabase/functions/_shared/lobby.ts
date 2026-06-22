@@ -1,4 +1,5 @@
 import { cryptoShuffle } from "../../../src/game/deal.ts";
+import { randomizeTeams as randomizeTeamAssignments } from "../../../src/game/teams.ts";
 
 const LOBBY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -34,4 +35,8 @@ export function shuffledSeatOrder<T>(values: readonly T[]): T[] {
 
 export function teamForSeat(seatIndex: number): 0 | 1 {
   return seatIndex % 2 === 0 ? 0 : 1;
+}
+
+export function randomizeTeams(playerIds: readonly string[]) {
+  return randomizeTeamAssignments(playerIds, randomInt);
 }

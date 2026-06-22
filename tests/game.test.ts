@@ -3,6 +3,7 @@ import { CARD_CATALOG, getCardsForBook } from "../src/game/cards";
 import { resolveClaim } from "../src/game/claims";
 import { dealCards } from "../src/game/deal";
 import { validateAsk } from "../src/game/rules";
+import { randomizeTeams } from "../src/game/teams";
 import type { ClaimAssignment, HeldCard, PlayerRef } from "../src/game/types";
 
 describe("Literature card catalog", () => {
@@ -94,6 +95,36 @@ describe("deal policy", () => {
 
     expect(dealt).toHaveLength(54);
     expect(Object.values(counts)).toEqual([7, 7, 7, 7, 7, 7, 6, 6]);
+  });
+});
+
+describe("team randomization", () => {
+  const deterministicRandom = () => 0;
+
+  it("splits an even number of players evenly across teams", () => {
+    const assignments = randomizeTeams(
+      ["p1", "p2", "p3", "p4", "p5", "p6"],
+      deterministicRandom
+    );
+    const counts = countByPlayer(assignments.map((assignment) => `team-${assignment.teamIndex}`));
+
+    expect(assignments).toHaveLength(6);
+    expect(counts["team-0"]).toBe(3);
+    expect(counts["team-1"]).toBe(3);
+  });
+
+  it("allows one team to have one extra player for odd player counts", () => {
+    const assignments = randomizeTeams(["p1", "p2", "p3", "p4", "p5"], deterministicRandom);
+    const counts = countByPlayer(assignments.map((assignment) => `team-${assignment.teamIndex}`));
+
+    expect(assignments).toHaveLength(5);
+    expect(Math.abs((counts["team-0"] ?? 0) - (counts["team-1"] ?? 0))).toBe(1);
+  });
+
+  it("rejects duplicate player IDs", () => {
+    expect(() => randomizeTeams(["p1", "p1", "p2"], deterministicRandom)).toThrow(
+      "duplicate player IDs"
+    );
   });
 });
 

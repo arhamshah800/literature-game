@@ -23,6 +23,7 @@ src/game/
   events.ts      Realtime event payload types.
   index.ts       Public game engine exports.
   rules.ts       Ask validation and shared rule helpers.
+  teams.ts       Balanced server-side team randomization.
   types.ts       Core TypeScript domain types.
 
 supabase/
@@ -34,6 +35,7 @@ supabase/
     join-game/     Join an existing lobby by code.
     start-game/    Server-side shuffle, deal, and start.
     ask-card/      Authoritative card ask endpoint.
+    randomize-teams/ Host-only team randomization before start.
     submit-claim/  Authoritative claim endpoint.
     get-game-state/ Public state plus the authenticated player's hand.
 
@@ -55,6 +57,9 @@ This implementation models the following rules:
   - Seat `2` -> team `0`
   - Seat `3` -> team `1`
   - And so on.
+- Waiting lobbies can also randomize teams before the game starts.
+- Randomized teams are balanced as evenly as possible.
+- If there is an odd number of players during randomization, one team may have exactly one extra player.
 - The game uses a **54-card deck**.
 - The deck contains the normal 52 cards plus two Jokers.
 - The deck is divided into **nine books** of six cards each.
@@ -158,6 +163,7 @@ The backend is responsible for:
 
 - Creating lobbies.
 - Assigning seats and teams.
+- Randomizing teams before the game starts.
 - Shuffling the deck.
 - Dealing cards.
 - Validating asks.
@@ -412,6 +418,43 @@ Backend behavior:
 - Emits `game.started`.
 - Emits `turn.changed`.
 
+### `randomize-teams`
+
+Randomizes team assignments in a waiting lobby.
+
+Only the host can call this endpoint. It cannot be called after the game starts.
+
+Request:
+
+```json
+{
+  "gameId": "uuid"
+}
+```
+
+Backend behavior:
+
+- Locks the game row.
+- Verifies the caller is host.
+- Verifies the game is waiting.
+- Locks seated players.
+- Randomly shuffles player IDs server-side.
+- Assigns teams as evenly as possible.
+- Allows one team to have one extra player when the seated player count is odd.
+- Emits `teams.randomized`.
+
+Response:
+
+```json
+{
+  "assignments": [
+    { "playerId": "uuid", "teamIndex": 0 },
+    { "playerId": "uuid", "teamIndex": 1 }
+  ],
+  "state": {}
+}
+```
+
 ### `ask-card`
 
 Asks an opposing player for a specific card.
@@ -548,6 +591,7 @@ Implemented event types:
 player.joined
 game.started
 turn.changed
+teams.randomized
 card.asked
 card.transferred
 ask.missed
@@ -596,6 +640,7 @@ supabase functions deploy create-game
 supabase functions deploy join-game
 supabase functions deploy start-game
 supabase functions deploy ask-card
+supabase functions deploy randomize-teams
 supabase functions deploy submit-claim
 supabase functions deploy get-game-state
 ```
