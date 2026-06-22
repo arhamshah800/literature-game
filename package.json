@@ -1,0 +1,18 @@
+{
+  "name": "literature-game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative real-time multiplayer Literature card game built with TypeScript, Supabase, and Vercel.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
