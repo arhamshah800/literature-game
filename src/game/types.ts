@@ -1,4 +1,4 @@
-export type PlayerCount = 6 | 8;
+export type PlayerCount = 4 | 5 | 6 | 7 | 8;
 
 export type Suit = "clubs" | "diamonds" | "hearts" | "spades";
 

@@ -32,7 +32,7 @@ create table public.games (
   lobby_code text not null unique,
   host_user_id uuid not null references public.profiles(id),
   status public.game_status not null default 'waiting',
-  player_count int not null check (player_count in (6, 8)),
+  player_count int not null check (player_count between 4 and 8),
   current_turn_player_id uuid,
   winning_team_index int check (winning_team_index in (0, 1)),
   version bigint not null default 0,

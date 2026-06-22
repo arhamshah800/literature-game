@@ -49,7 +49,7 @@ Literature is a team-based card deduction game.
 
 This implementation models the following rules:
 
-- The game supports **6 or 8 players**.
+- The game supports **4 to 8 players**.
 - Players are split into two teams.
 - Seats alternate teams:
   - Seat `0` -> team `0`
@@ -133,21 +133,19 @@ The backend resolves claims with this order:
 
 Once a book is claimed or cancelled, all six cards leave active play.
 
-## 8-Player Deal Policy
+## Deal Policy
 
-A 54-card deck divides evenly among 6 players:
+A 54-card deck is dealt round-robin for every supported lobby size:
 
 ```txt
+4 players -> 14, 14, 13, 13 cards
+5 players -> 11, 11, 11, 11, 10 cards
 6 players -> 9 cards each
-```
-
-A 54-card deck does not divide evenly among 8 players. This repository currently uses a deterministic round-robin policy:
-
-```txt
+7 players -> 8, 8, 8, 8, 8, 7, 7 cards
 8 players -> 7, 7, 7, 7, 7, 7, 6, 6 cards
 ```
 
-The architecture supports changing this policy in `src/game/deal.ts` if your house rules require a different 8-player distribution.
+The architecture supports changing this policy in `src/game/deal.ts` if your house rules require a different distribution.
 
 ## Authoritative Backend Model
 

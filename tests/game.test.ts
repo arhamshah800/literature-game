@@ -96,6 +96,14 @@ describe("deal policy", () => {
     expect(dealt).toHaveLength(54);
     expect(Object.values(counts)).toEqual([7, 7, 7, 7, 7, 7, 6, 6]);
   });
+
+  it("deals 54 cards round-robin to odd player counts", () => {
+    const dealt = dealCards(["p1", "p2", "p3", "p4", "p5", "p6", "p7"], 7, deterministicRandom);
+    const counts = countByPlayer(dealt.map((card) => card.playerId));
+
+    expect(dealt).toHaveLength(54);
+    expect(Object.values(counts)).toEqual([8, 8, 8, 8, 8, 7, 7]);
+  });
 });
 
 describe("team randomization", () => {

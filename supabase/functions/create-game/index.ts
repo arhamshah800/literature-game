@@ -23,8 +23,12 @@ Deno.serve(async (request) => {
     userId = user.id;
     requestBody = await readJsonBody<CreateGameRequest>(request);
 
-    if (requestBody.playerCount !== 6 && requestBody.playerCount !== 8) {
-      throw new Error("playerCount must be either 6 or 8.");
+    if (
+      !Number.isInteger(requestBody.playerCount) ||
+      requestBody.playerCount < 4 ||
+      requestBody.playerCount > 8
+    ) {
+      throw new Error("playerCount must be between 4 and 8.");
     }
 
     const displayName = requestBody.displayName?.trim() || user.email || "Player";
