@@ -13,10 +13,12 @@ export default {
         sage: "#d8e1cf",
         skywash: "#dbe7ea",
         ink: "#40382f",
-        bark: "#776556"
+        bark: "#776556",
+        cardFace: "#fffdf7"
       },
       boxShadow: {
-        soft: "0 22px 60px rgba(77, 63, 48, 0.12)"
+        soft: "0 22px 60px rgba(0, 0, 0, 0.22)",
+        card: "0 18px 38px rgba(0, 0, 0, 0.28)"
       }
     }
   },

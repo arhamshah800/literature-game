@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  color: #40382f;
-  background: #f7f0e5;
+  color: #fffdf7;
+  background: #080913;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -24,22 +24,168 @@ select {
 
 @layer components {
   .panel {
-    @apply border border-bark/10 bg-linen/85 shadow-soft backdrop-blur;
+    @apply border border-white/15 bg-white/10 shadow-soft backdrop-blur-xl;
   }
 
   .control {
-    @apply h-11 rounded-md border border-bark/15 bg-linen px-3 text-sm text-ink outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/15;
+    @apply h-11 rounded-md border border-bark/15 bg-linen px-3 text-sm text-ink outline-none transition focus:border-cyan-200 focus:ring-4 focus:ring-cyan-200/20;
   }
 
   .icon-button {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-md border border-bark/15 bg-linen text-ink transition hover:border-clay/50 hover:bg-oat disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-md border border-bark/15 bg-linen text-ink transition hover:border-cyan-200/60 hover:bg-oat disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .primary-button {
-    @apply inline-flex h-11 items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-linen transition hover:bg-bark disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gradient-to-r from-cyan-200 to-emerald-200 px-4 text-sm font-black text-zinc-950 shadow-card transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .secondary-button {
-    @apply inline-flex h-11 items-center justify-center gap-2 rounded-md border border-bark/15 bg-linen px-4 text-sm font-semibold text-ink transition hover:border-clay/50 hover:bg-oat disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-md border border-bark/15 bg-linen px-4 text-sm font-black text-ink transition hover:border-cyan-200/60 hover:bg-oat disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .game-scene {
+    @apply mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4;
+  }
+
+  .table-top {
+    min-height: clamp(500px, 64vh, 720px);
+    @apply relative overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(ellipse_at_center,#16837c_0%,#116a6c_42%,#144353_72%,#16203c_100%)] shadow-soft;
+  }
+
+  .table-top::before {
+    content: "";
+    position: absolute;
+    inset: 12%;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background:
+      radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 55%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent);
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.18);
+  }
+
+  .hand-dock {
+    @apply rounded-2xl border border-white/15 bg-zinc-950/45 p-4 shadow-soft backdrop-blur-xl;
+  }
+
+  .hand-fan-shell {
+    @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 px-1 pb-2 pt-5;
+  }
+
+  .hand-fan-scroll {
+    @apply overflow-x-auto overflow-y-hidden pb-5;
+    scrollbar-width: thin;
+  }
+
+  .hand-fan-stage {
+    @apply relative mx-auto h-64 min-w-full;
+  }
+
+  .game-card {
+    transform-origin: center bottom;
+    touch-action: manipulation;
+  }
+
+  .game-card.selected-card {
+    box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.75), 0 22px 44px rgba(0, 0, 0, 0.34);
+  }
+
+  .game-card.received-card {
+    box-shadow: 0 0 30px rgba(250, 204, 21, 0.9), 0 18px 38px rgba(0, 0, 0, 0.28);
+  }
+
+  .card-back {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 18px rgba(0, 0, 0, 0.25);
+  }
+
+  .player-seat {
+    @apply absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center;
+  }
+
+  .seat-avatar {
+    @apply grid h-16 w-16 place-items-center rounded-2xl border-2 text-lg font-black text-zinc-950 shadow-card;
+  }
+
+  .seat-avatar.team-north {
+    @apply border-emerald-100 bg-gradient-to-br from-emerald-200 to-cyan-200;
+  }
+
+  .seat-avatar.team-south {
+    @apply border-rose-100 bg-gradient-to-br from-rose-200 to-amber-200;
+  }
+
+  .seat-avatar.me {
+    @apply ring-4 ring-white/45;
+  }
+
+  .seat-avatar.active {
+    @apply scale-110;
+  }
+
+  .speech-bubble {
+    @apply absolute bottom-[calc(100%+0.55rem)] left-1/2 min-w-28 -translate-x-1/2 rounded-xl px-3 py-2 text-center text-xs font-black text-zinc-950 shadow-card;
+  }
+
+  .speech-bubble.ask {
+    @apply bg-cyan-100;
+  }
+
+  .speech-bubble.miss {
+    @apply bg-rose-100;
+  }
+
+  .speech-bubble.join {
+    @apply bg-emerald-100;
+  }
+
+  .speech-bubble.claim {
+    @apply bg-amber-100;
+  }
+
+  .book-ribbon {
+    @apply absolute bottom-4 left-1/2 z-10 flex w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-white/10 bg-black/20 p-2 backdrop-blur;
+  }
+
+  .book-token {
+    @apply shrink-0 rounded-full px-3 py-1 text-[11px] font-black;
+  }
+
+  .score-badge {
+    @apply grid min-w-20 rounded-xl bg-gradient-to-br px-3 py-2 text-zinc-950 shadow-card;
+  }
+
+  .score-badge span {
+    @apply text-[10px] font-black uppercase tracking-[0.14em];
+  }
+
+  .score-badge strong {
+    @apply text-2xl font-black leading-none;
+  }
+
+  .table-chip {
+    @apply rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white transition hover:bg-white/20;
+  }
+
+  .table-action {
+    @apply h-12 rounded-xl;
+  }
+
+  @media (max-width: 640px) {
+    .table-top {
+      min-height: 580px;
+      border-radius: 1.25rem;
+    }
+
+    .seat-avatar {
+      @apply h-12 w-12 rounded-xl text-sm;
+    }
+
+    .player-seat .game-card {
+      display: none;
+    }
+
+    .hand-fan-stage {
+      height: 15rem;
+    }
   }
 }

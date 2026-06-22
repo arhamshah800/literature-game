@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -16,6 +16,9 @@ import {
   X
 } from "lucide-react";
 import { BOOK_CODES, getCardsForBook } from "./game/cards";
+import { adaptRealtimePayload } from "./game/clientEvents";
+import { bookLabels, formatCard, teamNames } from "./game/display";
+import { buildRequestCardOptions, effectFromEvent, type TableEffect } from "./game/ui";
 import type {
   BookCode,
   CardCode,
@@ -27,18 +30,11 @@ import type {
   PublicPlayerState,
   TeamIndex
 } from "./game/types";
+import { CardCarousel } from "./components/CardCarousel";
+import { GameCard } from "./components/GameCard";
+import { GameTable } from "./components/GameTable";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import "./styles.css";
-
-type GameEventRow = {
-  id: string;
-  game_id: string;
-  version: number;
-  event_type: string;
-  actor_player_id: string | null;
-  payload: Record<string, unknown>;
-  created_at: string;
-};
 
 type BusyAction =
   | "auth"
@@ -55,6 +51,7 @@ type BusyAction =
 const storedGameIdKey = "literature.gameId";
 const storedPlayerIdKey = "literature.playerId";
 const storedNameKey = "literature.displayName";
+const soundMutedKey = "literature.soundMuted";
 const playerCountOptions = [4, 5, 6, 7, 8] as const;
 
 function hashRequestKey(value: string) {
@@ -78,23 +75,6 @@ function getOrCreateRequestId(storageKey: string) {
   return requestId;
 }
 
-const bookLabels: Record<BookCode, string> = {
-  clubs_low: "Clubs Low",
-  clubs_high: "Clubs High",
-  diamonds_low: "Diamonds Low",
-  diamonds_high: "Diamonds High",
-  hearts_low: "Hearts Low",
-  hearts_high: "Hearts High",
-  spades_low: "Spades Low",
-  spades_high: "Spades High",
-  eights_jokers: "8s + Jokers"
-};
-
-const teamNames: Record<TeamIndex, string> = {
-  0: "North",
-  1: "South"
-};
-
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [displayName, setDisplayName] = useState(() => localStorage.getItem(storedNameKey) ?? "");
@@ -102,13 +82,17 @@ function App() {
   const [playerId, setPlayerId] = useState(() => localStorage.getItem(storedPlayerIdKey) ?? "");
   const [state, setState] = useState<PublicGameState | null>(null);
   const [hand, setHand] = useState<MyHandState | null>(null);
-  const [events, setEvents] = useState<GameEventRow[]>([]);
   const [joinCode, setJoinCode] = useState("");
   const [playerCount, setPlayerCount] = useState<PlayerCount>(6);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [error, setError] = useState("");
   const [askOpen, setAskOpen] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
+  const [effects, setEffects] = useState<TableEffect[]>([]);
+  const [selectedCard, setSelectedCard] = useState<CardCode | null>(null);
+  const [soundMuted, setSoundMuted] = useState(() => localStorage.getItem(soundMutedKey) === "true");
+  const audioRef = useRef<AudioContext | null>(null);
+  const audioArmedRef = useRef(false);
 
   const view = state?.status === "active" || state?.status === "completed" ? "game" : "lobby";
   const me = useMemo(
@@ -120,18 +104,66 @@ function App() {
   const canStart = Boolean(state && isHost && state.players.length === state.playerCount && state.status === "waiting");
   const isMyTurn = Boolean(state?.currentTurnPlayerId && state.currentTurnPlayerId === playerId);
 
+  const armAudio = useCallback(() => {
+    audioArmedRef.current = true;
+  }, []);
+
+  const playCue = useCallback((cue: "slide" | "turn" | "miss" | "claim" | "join" | "complete" | "invalid") => {
+    if (soundMuted || !audioArmedRef.current) return;
+    try {
+      const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const context = audioRef.current ?? new AudioContextClass();
+      audioRef.current = context;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      const frequencies = {
+        slide: 520,
+        turn: 740,
+        miss: 170,
+        claim: 880,
+        join: 420,
+        complete: 660,
+        invalid: 120
+      };
+      oscillator.frequency.setValueAtTime(frequencies[cue], now);
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(80, frequencies[cue] * 0.62), now + 0.16);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.22);
+    } catch {
+      // Browsers may block audio until a gesture; the visual feedback still carries the action.
+    }
+  }, [soundMuted]);
+
+  const enqueueEffects = useCallback((nextEffects: TableEffect[]) => {
+    if (!nextEffects.length) return;
+    setEffects((current) => [...current, ...nextEffects]);
+    for (const effect of nextEffects) {
+      const ttl = effect.kind === "transfer" ? 1400 : effect.kind === "celebration" ? 3400 : 4200;
+      window.setTimeout(() => {
+        setEffects((current) => current.filter((item) => item.id !== effect.id));
+      }, ttl);
+    }
+  }, []);
+
   const run = useCallback(async <T,>(action: BusyAction, work: () => Promise<T>): Promise<T | null> => {
     setBusyAction(action);
     setError("");
     try {
       return await work();
     } catch (caught) {
+      playCue("invalid");
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
       return null;
     } finally {
       setBusyAction(null);
     }
-  }, []);
+  }, [playCue]);
 
   const refreshGame = useCallback(async (targetGameId = gameId) => {
     if (!targetGameId) return;
@@ -151,18 +183,6 @@ function App() {
     }
   }, [gameId]);
 
-  const loadEvents = useCallback(async (targetGameId = gameId) => {
-    if (!targetGameId) return;
-    const { data, error: responseError } = await supabase
-      .from("game_events")
-      .select("id, game_id, version, event_type, actor_player_id, payload, created_at")
-      .eq("game_id", targetGameId)
-      .order("created_at", { ascending: false })
-      .limit(80);
-    if (responseError) throw responseError;
-    setEvents((data ?? []) as GameEventRow[]);
-  }, [gameId]);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -175,9 +195,8 @@ function App() {
     if (!session || !gameId) return;
     void run("load", async () => {
       await refreshGame(gameId);
-      await loadEvents(gameId);
     });
-  }, [gameId, loadEvents, refreshGame, run, session]);
+  }, [gameId, refreshGame, run, session]);
 
   useEffect(() => {
     if (!session || !gameId) return;
@@ -191,9 +210,19 @@ function App() {
         .on(
           "broadcast",
           { event: "*" },
-          () => {
+          (message) => {
+            const clientEvent = adaptRealtimePayload(message);
+            if (clientEvent) {
+              const visualEffects = effectFromEvent(clientEvent);
+              enqueueEffects(visualEffects);
+              if (clientEvent.type === "card.transferred") playCue("slide");
+              if (clientEvent.type === "turn.changed") playCue("turn");
+              if (clientEvent.type === "ask.missed") playCue("miss");
+              if (clientEvent.type === "claim.resolved") playCue("claim");
+              if (clientEvent.type === "player.joined") playCue("join");
+              if (clientEvent.type === "game.completed") playCue("complete");
+            }
             void refreshGame(gameId);
-            void loadEvents(gameId);
           }
         )
         .subscribe();
@@ -202,7 +231,7 @@ function App() {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [gameId, loadEvents, refreshGame, session]);
+  }, [enqueueEffects, gameId, playCue, refreshGame, session]);
 
   useEffect(() => {
     if (!session || !gameId) return;
@@ -274,6 +303,7 @@ function App() {
   }
 
   async function resetGuest() {
+    armAudio();
     await run("auth", async () => {
       leaveLocalGame();
       localStorage.removeItem(storedNameKey);
@@ -314,6 +344,7 @@ function App() {
   }
 
   async function createGame() {
+    armAudio();
     await run("create", async () => {
       const name = await preparePlayer();
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("create-game", {
@@ -326,11 +357,11 @@ function App() {
       setHand(null);
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
-      await loadEvents(result.gameId);
     });
   }
 
   async function joinGame() {
+    armAudio();
     await run("join", async () => {
       const name = await preparePlayer();
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("join-game", {
@@ -342,11 +373,11 @@ function App() {
       setState(result.state);
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
-      await loadEvents(result.gameId);
     });
   }
 
   async function joinRandomGame() {
+    armAudio();
     await run("joinRandom", async () => {
       const name = await preparePlayer();
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("join-random-game", {
@@ -358,12 +389,12 @@ function App() {
       setHand(null);
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
-      await loadEvents(result.gameId);
     });
   }
 
   async function randomizeTeams() {
     if (!state) return;
+    armAudio();
     await run("randomize", async () => {
       const result = await invokeGameFunction<{ state: PublicGameState }>("randomize-teams", { gameId: state.gameId });
       setState(result.state);
@@ -372,10 +403,12 @@ function App() {
 
   async function startGame() {
     if (!state) return;
+    armAudio();
     await run("start", async () => {
       const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("start-game", { gameId: state.gameId });
       setState(result.state);
       setHand(result.myHand);
+      playCue("turn");
     });
   }
 
@@ -384,9 +417,23 @@ function App() {
     setPlayerId("");
     setState(null);
     setHand(null);
-    setEvents([]);
+    setEffects([]);
+    setSelectedCard(null);
     localStorage.removeItem(storedGameIdKey);
     localStorage.removeItem(storedPlayerIdKey);
+  }
+
+  function addLocalBubble(text: string) {
+    if (!me) return;
+    armAudio();
+    const effect: TableEffect = {
+      id: `local:${Date.now()}:${text}`,
+      kind: "speech",
+      playerId: me.playerId,
+      text,
+      tone: "ask"
+    };
+    enqueueEffects([effect]);
   }
 
   if (!hasSupabaseConfig) {
@@ -395,24 +442,24 @@ function App() {
 
   return (
     <Shell error={error}>
-      <header className="sticky top-0 z-30 border-b border-bark/10 bg-oat/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/70 text-white backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
           <button className="flex items-center gap-3 text-left" onClick={leaveLocalGame}>
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-ink text-linen">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-300 to-rose-300 text-zinc-950 shadow-card">
               <BookOpenCheck className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-base font-semibold text-ink">Literature</span>
-              <span className="block text-xs text-bark">{state?.lobbyCode ?? "Lobby"}</span>
+              <span className="block text-base font-black">Literature</span>
+              <span className="block text-xs font-bold text-white/55">{state?.lobbyCode ?? "Lobby"}</span>
             </span>
           </button>
           <div className="flex items-center gap-2">
             {state ? (
-              <button className="icon-button" onClick={() => void run("load", async () => refreshGame())} title="Refresh">
+              <button className="icon-button border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => void run("load", async () => refreshGame())} title="Refresh">
                 <RefreshCw className="h-4 w-4" />
               </button>
             ) : null}
-            <button className="secondary-button hidden sm:inline-flex" onClick={() => void resetGuest()} title="Reset guest">
+            <button className="secondary-button hidden border-white/20 bg-white/10 text-white hover:bg-white/20 sm:inline-flex" onClick={() => void resetGuest()} title="Reset guest">
               New player
             </button>
           </div>
@@ -436,64 +483,92 @@ function App() {
           onRandomize={() => void randomizeTeams()}
           onStart={() => void startGame()}
         />
-      ) : (
-        <GameBoard
-          askOpen={askOpen}
-          busyAction={busyAction}
-          claimOpen={claimOpen}
-          events={events}
-          hand={hand}
-          isMyTurn={isMyTurn}
-          me={me}
-          state={state}
-          onAsk={async (targetPlayerId, cardCode) => {
-            if (!state) return;
-            await run("ask", async () => {
-              const storageKey = pendingRequestKey("ask", state.gameId, `${targetPlayerId}:${cardCode}`);
-              const requestId = getOrCreateRequestId(storageKey);
-              const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("ask-card", {
-                gameId: state.gameId,
-                targetPlayerId,
-                cardCode,
-                requestId
+      ) : state ? (
+        <>
+          <GameTable
+            busyAction={busyAction}
+            effects={effects}
+            hand={hand}
+            isMyTurn={isMyTurn}
+            me={me}
+            selectedCard={selectedCard}
+            soundMuted={soundMuted}
+            state={state}
+            onAskOpen={setAskOpen}
+            onClaimOpen={setClaimOpen}
+            onEmote={addLocalBubble}
+            onSelectCard={setSelectedCard}
+            onToggleSound={() => {
+              armAudio();
+              setSoundMuted((current) => {
+                localStorage.setItem(soundMutedKey, String(!current));
+                return !current;
               });
-              localStorage.removeItem(storageKey);
-              setState(result.state);
-              setHand(result.myHand);
-              setAskOpen(false);
-            });
-          }}
-          onAskOpen={setAskOpen}
-          onClaim={async (bookCode, assignments) => {
-            if (!state) return;
-            await run("claim", async () => {
-              const storageKey = pendingRequestKey("claim", state.gameId, JSON.stringify({ bookCode, assignments }));
-              const requestId = getOrCreateRequestId(storageKey);
-              const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("submit-claim", {
-                gameId: state.gameId,
-                bookCode,
-                assignments,
-                requestId
-              });
-              localStorage.removeItem(storageKey);
-              setState(result.state);
-              setHand(result.myHand);
-              setClaimOpen(false);
-            });
-          }}
-          onClaimOpen={setClaimOpen}
-        />
-      )}
+            }}
+          />
+          {askOpen ? (
+            <AskModal
+              busy={busyAction === "ask"}
+              hand={hand}
+              me={me}
+              state={state}
+              onClose={() => setAskOpen(false)}
+              onSubmit={async (targetPlayerId, cardCode) => {
+                armAudio();
+                await run("ask", async () => {
+                  const storageKey = pendingRequestKey("ask", state.gameId, `${targetPlayerId}:${cardCode}`);
+                  const requestId = getOrCreateRequestId(storageKey);
+                  const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("ask-card", {
+                    gameId: state.gameId,
+                    targetPlayerId,
+                    cardCode,
+                    requestId
+                  });
+                  localStorage.removeItem(storageKey);
+                  setState(result.state);
+                  setHand(result.myHand);
+                  setAskOpen(false);
+                });
+              }}
+            />
+          ) : null}
+          {claimOpen ? (
+            <ClaimModal
+              busy={busyAction === "claim"}
+              me={me}
+              state={state}
+              onClose={() => setClaimOpen(false)}
+              onSubmit={async (bookCode, assignments) => {
+                armAudio();
+                await run("claim", async () => {
+                  const storageKey = pendingRequestKey("claim", state.gameId, JSON.stringify({ bookCode, assignments }));
+                  const requestId = getOrCreateRequestId(storageKey);
+                  const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("submit-claim", {
+                    gameId: state.gameId,
+                    bookCode,
+                    assignments,
+                    requestId
+                  });
+                  localStorage.removeItem(storageKey);
+                  setState(result.state);
+                  setHand(result.myHand);
+                  setClaimOpen(false);
+                });
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
     </Shell>
   );
 }
 
 function Shell({ children, error }: { children?: React.ReactNode; error?: string }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d8e1cf_0,#f7f0e5_34%,#fffaf1_100%)] text-ink">
+    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_15%_10%,#1fb6b6_0,#20235a_25%,#121525_58%,#080913_100%)] text-ink">
       {children}
       {error ? (
-        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-md border border-clay/20 bg-linen px-4 py-3 text-sm font-medium text-ink shadow-soft">
+        <div className="fixed bottom-4 left-1/2 z-[80] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-lg border border-rose-200/35 bg-zinc-950/85 px-4 py-3 text-sm font-bold text-white shadow-soft backdrop-blur">
           {error}
         </div>
       ) : null}
@@ -521,24 +596,24 @@ function LobbyView(props: {
   const waiting = props.state?.status === "waiting";
   return (
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[360px_1fr]">
-      <section className="panel rounded-lg p-4 sm:p-5">
+      <section className="panel rounded-xl p-4 text-white sm:p-5">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-ink">Lobby</h2>
+          <h2 className="text-xl font-black">Lobby</h2>
           {props.state ? <LobbyCode code={props.state.lobbyCode} /> : null}
         </div>
         <div className="grid gap-4">
-          <input className="control" value={props.displayName} onChange={(event) => props.onDisplayName(event.target.value)} placeholder="Display name" />
-          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
+          <input className="control border-white/20 bg-white/10 text-white placeholder:text-white/45" value={props.displayName} onChange={(event) => props.onDisplayName(event.target.value)} placeholder="Display name" />
+          <div className="rounded-xl border border-white/10 bg-white/10 p-3">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">Create a room</h3>
-              <span className="text-xs font-semibold text-bark">{props.playerCount} players</span>
+              <h3 className="text-sm font-black">Create a room</h3>
+              <span className="text-xs font-bold text-white/65">{props.playerCount} players</span>
             </div>
             <div className="mb-3 grid grid-cols-5 gap-2">
               {playerCountOptions.map((count) => (
                 <button
                   key={count}
-                  className={`h-10 rounded-md border text-sm font-semibold transition ${
-                    props.playerCount === count ? "border-ink bg-ink text-linen" : "border-bark/15 bg-linen text-ink hover:border-clay/50"
+                  className={`h-10 rounded-md border text-sm font-black transition ${
+                    props.playerCount === count ? "border-cyan-200 bg-cyan-200 text-zinc-950" : "border-white/15 bg-white/10 text-white hover:bg-white/20"
                   }`}
                   onClick={() => props.onPlayerCount(count)}
                 >
@@ -551,30 +626,28 @@ function LobbyView(props: {
               Create room
             </button>
           </div>
-          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
-            <h3 className="mb-3 text-sm font-bold text-ink">Join a game</h3>
+          <div className="rounded-xl border border-white/10 bg-white/10 p-3">
+            <h3 className="mb-3 text-sm font-black">Join a game</h3>
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
-                className="control uppercase"
+                className="control uppercase border-white/20 bg-white/10 text-white placeholder:text-white/45"
                 value={props.joinCode}
                 onChange={(event) => props.onJoinCode(event.target.value.toUpperCase())}
                 placeholder="Join code"
               />
-              <button className="secondary-button px-3" onClick={props.onJoin} disabled={!props.displayName.trim() || !props.joinCode || props.busyAction === "join"}>
+              <button className="secondary-button border-white/20 bg-white/10 px-3 text-white hover:bg-white/20" onClick={props.onJoin} disabled={!props.displayName.trim() || !props.joinCode || props.busyAction === "join"}>
                 {props.busyAction === "join" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
           </div>
-          <div className="rounded-lg border border-bark/10 bg-linen/55 p-3">
-            <button className="secondary-button w-full" onClick={props.onJoinRandom} disabled={!props.displayName.trim() || props.busyAction === "joinRandom"}>
-              {props.busyAction === "joinRandom" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-              Join random game
-            </button>
-          </div>
+          <button className="secondary-button w-full border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onJoinRandom} disabled={!props.displayName.trim() || props.busyAction === "joinRandom"}>
+            {props.busyAction === "joinRandom" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+            Join random game
+          </button>
         </div>
         {waiting && props.isHost ? (
           <div className="mt-5 grid grid-cols-2 gap-2">
-            <button className="secondary-button" onClick={props.onRandomize} disabled={props.busyAction === "randomize"}>
+            <button className="secondary-button border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onRandomize} disabled={props.busyAction === "randomize"}>
               <Shuffle className="h-4 w-4" />
               Teams
             </button>
@@ -585,25 +658,25 @@ function LobbyView(props: {
           </div>
         ) : null}
       </section>
-      <section className="panel min-h-[520px] rounded-lg p-4 sm:p-5">
+      <section className="panel min-h-[520px] rounded-xl p-4 text-white sm:p-5">
         {props.state ? (
           <>
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold text-ink">
+                <h2 className="text-3xl font-black">
                   {props.state.players.length} / {props.state.playerCount} seated
                 </h2>
-                <p className="mt-1 text-sm text-bark">Room {props.state.lobbyCode}</p>
+                <p className="mt-1 text-sm font-bold text-white/60">Room {props.state.lobbyCode}</p>
               </div>
               <SeatMeter total={props.state.playerCount} filled={props.state.players.length} />
             </div>
             <TeamGrid players={props.state.players} currentTurnPlayerId={props.state.currentTurnPlayerId} totalSeats={props.state.playerCount} />
           </>
         ) : (
-          <div className="flex min-h-[480px] items-center justify-center rounded-md border border-dashed border-bark/20 bg-linen/45">
+          <div className="flex min-h-[480px] items-center justify-center rounded-xl border border-dashed border-white/20 bg-white/10">
             <div className="text-center">
-              <Users className="mx-auto h-10 w-10 text-moss" />
-              <p className="mt-3 text-lg font-semibold text-ink">No room selected</p>
+              <Users className="mx-auto h-10 w-10 text-cyan-200" />
+              <p className="mt-3 text-lg font-black">No room selected</p>
             </div>
           </div>
         )}
@@ -612,131 +685,41 @@ function LobbyView(props: {
   );
 }
 
-function GameBoard(props: {
-  busyAction: BusyAction;
-  events: GameEventRow[];
-  hand: MyHandState | null;
-  isMyTurn: boolean;
-  me: PublicPlayerState | null;
-  state: PublicGameState | null;
-  askOpen: boolean;
-  claimOpen: boolean;
-  onAskOpen: (open: boolean) => void;
-  onClaimOpen: (open: boolean) => void;
-  onAsk: (targetPlayerId: string, cardCode: CardCode) => Promise<void>;
-  onClaim: (bookCode: BookCode, assignments: ClaimAssignment[]) => Promise<void>;
-}) {
-  if (!props.state) return null;
-  const scores = scoreBooks(props.state);
-  const currentPlayer = props.state.players.find((player) => player.playerId === props.state?.currentTurnPlayerId);
-  return (
-    <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[280px_1fr_360px]">
-      <aside className="grid gap-4 xl:sticky xl:top-[84px] xl:self-start">
-        <section className="panel rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clay">Turn</p>
-              <h2 className="mt-1 text-xl font-semibold text-ink">{currentPlayer?.displayName ?? "Waiting"}</h2>
-            </div>
-            <span className={`rounded-md px-2 py-1 text-xs font-bold ${props.isMyTurn ? "bg-sage text-ink" : "bg-parchment text-bark"}`}>
-              {props.isMyTurn ? "You" : props.state.status}
-            </span>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <ScorePill label={teamNames[0]} score={scores[0]} />
-            <ScorePill label={teamNames[1]} score={scores[1]} />
-          </div>
-        </section>
-        <section className="panel rounded-lg p-4">
-          <TeamGrid players={props.state.players} currentTurnPlayerId={props.state.currentTurnPlayerId} compact />
-        </section>
-      </aside>
-      <section className="grid min-w-0 gap-4">
-        <BookTrack state={props.state} />
-        <PlayerHand cards={props.hand?.cards ?? []} />
-        <div className="sticky bottom-3 z-20 grid grid-cols-2 gap-2 sm:relative sm:bottom-auto">
-          <button className="primary-button" onClick={() => props.onAskOpen(true)} disabled={!props.isMyTurn || props.busyAction === "ask"}>
-            <Hand className="h-4 w-4" />
-            Ask
-          </button>
-          <button className="secondary-button" onClick={() => props.onClaimOpen(true)} disabled={!props.isMyTurn || props.busyAction === "claim"}>
-            <Check className="h-4 w-4" />
-            Claim
-          </button>
-        </div>
-      </section>
-      <ActivityLog events={props.events} players={props.state.players} />
-      {props.askOpen ? (
-        <AskModal
-          busy={props.busyAction === "ask"}
-          hand={props.hand?.cards ?? []}
-          me={props.me}
-          state={props.state}
-          onClose={() => props.onAskOpen(false)}
-          onSubmit={props.onAsk}
-        />
-      ) : null}
-      {props.claimOpen ? (
-        <ClaimModal
-          busy={props.busyAction === "claim"}
-          me={props.me}
-          state={props.state}
-          onClose={() => props.onClaimOpen(false)}
-          onSubmit={props.onClaim}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 function AskModal(props: {
   busy: boolean;
-  hand: CardDefinition[];
+  hand: MyHandState | null;
   me: PublicPlayerState | null;
   state: PublicGameState;
   onClose: () => void;
   onSubmit: (targetPlayerId: string, cardCode: CardCode) => Promise<void>;
 }) {
-  const liveBooks = useMemo(
-    () => new Set(props.state.books.filter((book) => book.status === "unclaimed").map((book) => book.bookCode)),
-    [props.state.books]
+  const opponents = props.state.players.filter((player) => props.me && player.teamIndex !== props.me.teamIndex);
+  const [targetPlayerId, setTargetPlayerId] = useState(opponents.find((player) => player.cardCount > 0)?.playerId ?? opponents[0]?.playerId ?? "");
+  const options = useMemo(
+    () => buildRequestCardOptions({ hand: props.hand, me: props.me, state: props.state, targetPlayerId }),
+    [props.hand, props.me, props.state, targetPlayerId]
   );
-  const heldCodes = useMemo(() => new Set(props.hand.map((card) => card.code)), [props.hand]);
-  const eligibleBooks = useMemo(
-    () => [...new Set(props.hand.map((card) => card.bookCode))].filter((bookCode) => liveBooks.has(bookCode)),
-    [liveBooks, props.hand]
-  );
-  const [bookCode, setBookCode] = useState<BookCode | "">(eligibleBooks[0] ?? "");
-  const cards = useMemo(
-    () => (bookCode ? getCardsForBook(bookCode).filter((cardCode) => !heldCodes.has(cardCode)) : []),
-    [bookCode, heldCodes]
-  );
-  const [cardCode, setCardCode] = useState<CardCode | "">((cards[0] as CardCode | undefined) ?? "");
-  const opponents = props.state.players.filter((player) => props.me && player.teamIndex !== props.me.teamIndex && player.cardCount > 0);
-  const [targetPlayerId, setTargetPlayerId] = useState(opponents[0]?.playerId ?? "");
-
-  useEffect(() => {
-    if (bookCode && !cards.includes(cardCode as CardCode)) {
-      setCardCode((cards[0] as CardCode | undefined) ?? "");
-    }
-  }, [bookCode, cardCode, cards]);
 
   return (
-    <Modal title="Ask" onClose={props.onClose}>
-      <div className="grid gap-3">
-        <Select label="Opponent" value={targetPlayerId} onChange={setTargetPlayerId}>
-          {opponents.map((player) => <option key={player.playerId} value={player.playerId}>{player.displayName}</option>)}
-        </Select>
-        <Select label="Set" value={bookCode} onChange={(value) => setBookCode(value as BookCode)}>
-          {eligibleBooks.map((eligibleBook) => <option key={eligibleBook} value={eligibleBook}>{bookLabels[eligibleBook]}</option>)}
-        </Select>
-        <Select label="Card" value={cardCode} onChange={(value) => setCardCode(value as CardCode)}>
-          {cards.map((card) => <option key={card} value={card}>{formatCard(card)}</option>)}
-        </Select>
-        <button className="primary-button" disabled={!targetPlayerId || !cardCode || props.busy} onClick={() => props.onSubmit(targetPlayerId, cardCode as CardCode)}>
-          {props.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />}
-          Send ask
-        </button>
+    <Modal title="Request Card" onClose={props.onClose}>
+      <div className="grid gap-4 text-white">
+        <label className="grid gap-2 text-sm font-black text-white/75">
+          Opponent
+          <select className="control border-white/20 bg-zinc-950/60 text-white" value={targetPlayerId} onChange={(event) => setTargetPlayerId(event.target.value)}>
+            {opponents.map((player) => (
+              <option key={player.playerId} value={player.playerId}>
+                {player.displayName} ({player.cardCount})
+              </option>
+            ))}
+          </select>
+        </label>
+        <CardCarousel
+          options={options}
+          onPick={(cardCode) => {
+            if (!props.busy && targetPlayerId) void props.onSubmit(targetPlayerId, cardCode);
+          }}
+        />
+        <p className="text-center text-xs font-bold text-white/55">Only cards your hand can legally request are bright and clickable.</p>
       </div>
     </Modal>
   );
@@ -769,19 +752,25 @@ function ClaimModal(props: {
   }, [bookCode, fallbackPlayerId]);
 
   return (
-    <Modal title="Claim" onClose={props.onClose}>
-      <div className="grid gap-3">
-        <Select label="Set" value={bookCode} onChange={(value) => setBookCode(value as BookCode)}>
-          {unresolvedBooks.map((unresolvedBook) => <option key={unresolvedBook} value={unresolvedBook}>{bookLabels[unresolvedBook]}</option>)}
-        </Select>
-        <div className="grid gap-2">
+    <Modal title="Claim Board" onClose={props.onClose}>
+      <div className="grid gap-4 text-white">
+        <label className="grid gap-2 text-sm font-black text-white/75">
+          Book
+          <select className="control border-white/20 bg-zinc-950/60 text-white" value={bookCode} onChange={(event) => setBookCode(event.target.value as BookCode)}>
+            {unresolvedBooks.map((unresolvedBook) => <option key={unresolvedBook} value={unresolvedBook}>{bookLabels[unresolvedBook]}</option>)}
+          </select>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
           {cards.map((card) => (
-            <div key={card} className="grid grid-cols-[82px_1fr] items-center gap-2">
-              <span className="rounded-md border border-bark/10 bg-oat px-3 py-2 text-sm font-semibold">{formatCard(card)}</span>
+            <div key={card} className="rounded-xl border border-white/15 bg-white/10 p-3">
+              <div className="mb-3 flex justify-center">
+                <GameCard cardCode={card} size="small" />
+              </div>
               <select
-                className="control"
+                className="control w-full border-white/20 bg-zinc-950/60 text-white"
                 value={assignments[card] ?? ""}
                 onChange={(event) => setAssignments((current) => ({ ...current, [card]: event.target.value }))}
+                title={`Who holds ${formatCard(card)}?`}
               >
                 {teammates.map((player) => <option key={player.playerId} value={player.playerId}>{player.displayName}</option>)}
               </select>
@@ -794,7 +783,7 @@ function ClaimModal(props: {
           onClick={() => props.onSubmit(bookCode, cards.map((cardCode) => ({ cardCode, playerId: assignments[cardCode] ?? "" })))}
         >
           {props.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          Submit
+          Submit Claim
         </button>
       </div>
     </Modal>
@@ -803,110 +792,17 @@ function ClaimModal(props: {
 
 function Modal({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
   return (
-    <div className="fixed inset-0 z-40 grid place-items-end bg-ink/20 p-0 backdrop-blur-sm sm:place-items-center sm:p-4">
-      <div className="panel max-h-[92vh] w-full max-w-lg overflow-auto rounded-t-lg p-4 sm:rounded-lg sm:p-5">
+    <div className="fixed inset-0 z-40 grid place-items-end bg-zinc-950/55 p-0 backdrop-blur-sm sm:place-items-center sm:p-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-t-2xl border border-white/15 bg-zinc-950/90 p-4 shadow-soft sm:rounded-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-ink">{title}</h2>
-          <button className="icon-button" onClick={onClose} title="Close">
+          <h2 className="text-xl font-black text-white">{title}</h2>
+          <button className="icon-button border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onClose} title="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
         {children}
       </div>
     </div>
-  );
-}
-
-function Select({ children, label, onChange, value }: { children: React.ReactNode; label: string; onChange: (value: string) => void; value: string }) {
-  return (
-    <label className="grid gap-1 text-sm font-semibold text-bark">
-      {label}
-      <select className="control" value={value} onChange={(event) => onChange(event.target.value)}>
-        {children}
-      </select>
-    </label>
-  );
-}
-
-function PlayerHand({ cards }: { cards: CardDefinition[] }) {
-  const grouped = groupCards(cards);
-  return (
-    <section className="panel rounded-lg p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-ink">Hand</h2>
-        <span className="rounded-md bg-parchment px-2 py-1 text-xs font-bold text-bark">{cards.length} cards</span>
-      </div>
-      <div className="grid gap-4">
-        {grouped.length ? grouped.map(([bookCode, bookCards]) => (
-          <div key={bookCode}>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-bark">{bookLabels[bookCode]}</h3>
-              <span className="text-xs text-bark">{bookCards.length}/6</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-              {bookCards.map((card) => <CardTile key={card.code} card={card} />)}
-            </div>
-          </div>
-        )) : (
-          <div className="rounded-md border border-dashed border-bark/20 bg-linen/55 p-8 text-center text-sm font-semibold text-bark">
-            Waiting for the deal.
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CardTile({ card }: { card: CardDefinition }) {
-  const color = card.suit === "hearts" || card.suit === "diamonds" || card.code === "JOKER_RED" ? "text-clay" : "text-ink";
-  return (
-    <div className="aspect-[5/7] rounded-md border border-bark/15 bg-linen p-2 shadow-sm">
-      <div className={`text-lg font-bold ${color}`}>{formatCard(card.code)}</div>
-      <div className="mt-6 text-xs font-semibold capitalize text-bark">{card.isJoker ? "Joker" : card.suit}</div>
-    </div>
-  );
-}
-
-function ActivityLog({ events, players }: { events: GameEventRow[]; players: PublicPlayerState[] }) {
-  return (
-    <aside className="panel rounded-lg p-4 xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-104px)] xl:self-start xl:overflow-auto">
-      <h2 className="mb-4 text-xl font-semibold text-ink">Activity</h2>
-      <div className="grid gap-2">
-        {events.map((event) => (
-          <div key={event.id} className="rounded-md border border-bark/10 bg-linen/70 p-3 text-sm">
-            <p className="font-semibold text-ink">{eventText(event, players)}</p>
-            <p className="mt-1 text-xs text-bark">{new Date(event.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
-          </div>
-        ))}
-        {!events.length ? <p className="rounded-md border border-dashed border-bark/20 p-4 text-sm font-semibold text-bark">No moves yet.</p> : null}
-      </div>
-    </aside>
-  );
-}
-
-function BookTrack({ state }: { state: PublicGameState }) {
-  return (
-    <section className="panel rounded-lg p-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-9">
-        {state.books.map((book) => (
-          <div
-            key={book.bookCode}
-            className={`rounded-md border px-3 py-2 ${
-              book.status === "unclaimed"
-                ? "border-bark/10 bg-linen"
-                : book.awardedTeamIndex === 0
-                  ? "border-moss/30 bg-sage"
-                  : "border-clay/20 bg-parchment"
-            }`}
-          >
-            <p className="truncate text-xs font-bold text-ink">{bookLabels[book.bookCode]}</p>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-bark">
-              {book.status === "unclaimed" ? "Live" : book.status === "cancelled" ? "Void" : teamNames[book.awardedTeamIndex ?? 0]}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -925,10 +821,10 @@ function TeamGrid({
   return (
     <div className={`grid gap-3 ${compact ? "" : "md:grid-cols-2"}`}>
       {teams.map((teamPlayers, index) => (
-        <div key={index} className="rounded-lg border border-bark/10 bg-linen/60 p-3">
+        <div key={index} className="rounded-xl border border-white/10 bg-white/10 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-ink">{teamNames[index as TeamIndex]}</h3>
-            <span className="rounded-md bg-oat px-2 py-1 text-xs font-bold text-bark">
+            <h3 className="font-black">{teamNames[index as TeamIndex]}</h3>
+            <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-bold text-white/65">
               {teamPlayers.length}
               {totalSeats ? ` / ${Math.ceil(totalSeats / 2)}` : ""}
             </span>
@@ -937,7 +833,7 @@ function TeamGrid({
             {teamPlayers.map((player) => (
               <PlayerRow key={player.playerId} player={player} active={player.playerId === currentTurnPlayerId} />
             ))}
-            {!teamPlayers.length ? <div className="h-12 rounded-md border border-dashed border-bark/15" /> : null}
+            {!teamPlayers.length ? <div className="h-12 rounded-md border border-dashed border-white/15" /> : null}
           </div>
         </div>
       ))}
@@ -947,19 +843,19 @@ function TeamGrid({
 
 function PlayerRow({ active, player }: { active: boolean; player: PublicPlayerState }) {
   return (
-    <div className={`grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-md border p-2 ${
-      active ? "border-clay/40 bg-parchment" : "border-bark/10 bg-linen"
+    <div className={`grid grid-cols-[36px_1fr_auto] items-center gap-2 rounded-lg border p-2 ${
+      active ? "border-cyan-200/60 bg-cyan-200/20" : "border-white/10 bg-white/10"
     }`}>
-      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-oat text-xs font-bold text-ink">{player.seatIndex + 1}</span>
-      <span className="min-w-0 truncate text-sm font-semibold text-ink">{player.displayName}</span>
-      <span className="text-xs font-bold text-bark">{player.cardCount}</span>
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-xs font-black">{player.seatIndex + 1}</span>
+      <span className="min-w-0 truncate text-sm font-black">{player.displayName}</span>
+      <span className="text-xs font-black text-white/60">{player.cardCount}</span>
     </div>
   );
 }
 
 function LobbyCode({ code }: { code: string }) {
   return (
-    <button className="secondary-button h-9 px-3" onClick={() => void navigator.clipboard?.writeText(code)}>
+    <button className="secondary-button h-9 border-white/20 bg-white/10 px-3 text-white hover:bg-white/20" onClick={() => void navigator.clipboard?.writeText(code)}>
       <Copy className="h-4 w-4" />
       {code}
     </button>
@@ -970,69 +866,10 @@ function SeatMeter({ filled, total }: { filled: number; total: number }) {
   return (
     <div className="flex gap-1">
       {Array.from({ length: total }, (_, index) => (
-        <span key={index} className={`h-2 w-7 rounded-full ${index < filled ? "bg-moss" : "bg-bark/15"}`} />
+        <span key={index} className={`h-2 w-7 rounded-full ${index < filled ? "bg-cyan-200" : "bg-white/15"}`} />
       ))}
     </div>
   );
-}
-
-function ScorePill({ label, score }: { label: string; score: number }) {
-  return (
-    <div className="rounded-md border border-bark/10 bg-linen p-3">
-      <p className="text-xs font-semibold text-bark">{label}</p>
-      <p className="text-2xl font-bold text-ink">{score}</p>
-    </div>
-  );
-}
-
-function groupCards(cards: CardDefinition[]): [BookCode, CardDefinition[]][] {
-  return BOOK_CODES.map((bookCode) => [
-    bookCode,
-    cards.filter((card) => card.bookCode === bookCode).sort((left, right) => left.sortIndex - right.sortIndex)
-  ] as [BookCode, CardDefinition[]]).filter(([, bookCards]) => bookCards.length > 0);
-}
-
-function scoreBooks(state: PublicGameState): Record<TeamIndex, number> {
-  return {
-    0: state.books.filter((book) => book.status === "claimed" && book.awardedTeamIndex === 0).length,
-    1: state.books.filter((book) => book.status === "claimed" && book.awardedTeamIndex === 1).length
-  };
-}
-
-function playerName(players: PublicPlayerState[], playerId: unknown) {
-  return players.find((player) => player.playerId === playerId)?.displayName ?? "Someone";
-}
-
-function eventText(event: GameEventRow, players: PublicPlayerState[]) {
-  const payload = event.payload;
-  switch (event.event_type) {
-    case "player.joined":
-      return `${playerName(players, payload.playerId)} joined ${teamNames[(payload.teamIndex as TeamIndex) ?? 0]}.`;
-    case "game.started":
-      return `Game started. ${playerName(players, payload.firstTurnPlayerId)} leads.`;
-    case "teams.randomized":
-      return "Teams randomized.";
-    case "card.asked":
-      return `${playerName(players, payload.askerPlayerId)} asked ${playerName(players, payload.targetPlayerId)} for ${formatCard(payload.cardCode as CardCode)}.`;
-    case "card.transferred":
-      return `${formatCard(payload.cardCode as CardCode)} moved to ${playerName(players, payload.toPlayerId)}.`;
-    case "ask.missed":
-      return `${playerName(players, payload.targetPlayerId)} did not have ${formatCard(payload.cardCode as CardCode)}.`;
-    case "turn.changed":
-      return `${playerName(players, payload.currentTurnPlayerId)} has the turn.`;
-    case "claim.resolved":
-      return `${playerName(players, payload.claimingPlayerId)} claimed ${bookLabels[payload.bookCode as BookCode]}.`;
-    case "game.completed":
-      return `${teamNames[payload.winningTeamIndex as TeamIndex]} won.`;
-    default:
-      return event.event_type;
-  }
-}
-
-function formatCard(cardCode: CardCode | string) {
-  if (cardCode === "JOKER_RED") return "Red Joker";
-  if (cardCode === "JOKER_BLACK") return "Black Joker";
-  return cardCode;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
