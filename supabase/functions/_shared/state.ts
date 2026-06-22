@@ -60,7 +60,7 @@ export async function getPublicState(sql: SqlClient, gameId: string): Promise<un
       )
     ) as state
     from public.games g
-    where g.id = ${gameId}
+    where g.id = ${gameId}::uuid
   `;
   return rows[0]?.state ?? null;
 }
@@ -71,7 +71,7 @@ export async function getMyHand(
 ): Promise<unknown> {
   const rows = await sql`
     select jsonb_build_object(
-      'gameId', ${input.gameId},
+      'gameId', ${input.gameId}::uuid,
       'playerId', gp.id,
       'cards', coalesce(jsonb_agg(
         jsonb_build_object(
@@ -91,8 +91,8 @@ export async function getMyHand(
       and gc.location_type = 'player'
       and gc.holder_player_id = gp.id
     left join public.card_catalog cc on cc.code = gc.card_code
-    where gp.game_id = ${input.gameId}
-      and gp.user_id = ${input.userId}
+    where gp.game_id = ${input.gameId}::uuid
+      and gp.user_id = ${input.userId}::uuid
     group by gp.id
   `;
   return rows[0]?.hand ?? null;

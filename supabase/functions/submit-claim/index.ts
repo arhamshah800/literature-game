@@ -52,20 +52,20 @@ Deno.serve(async (request) => {
       const playerRows = await tx`
         select id
         from public.game_players
-        where game_id = ${requestBody!.gameId}
-          and user_id = ${user.id}
+        where game_id = ${requestBody!.gameId}::uuid
+          and user_id = ${user.id}::uuid
       `;
       playerId = playerRows[0]?.id ?? null;
 
       if (requestBody!.requestId) {
-        await tx`select pg_advisory_xact_lock(hashtextextended(${requestBody!.requestId}, 0))`;
+        await tx`select pg_advisory_xact_lock(hashtextextended(${requestBody!.requestId}::text, 0))`;
 
         const replayRows = await tx`
           select response_payload
           from public.action_log
-          where game_id = ${requestBody!.gameId}
-            and user_id = ${user.id}
-            and request_id = ${requestBody!.requestId}
+          where game_id = ${requestBody!.gameId}::uuid
+            and user_id = ${user.id}::uuid
+            and request_id = ${requestBody!.requestId}::uuid
             and action_type = 'submit_claim'
             and success = true
           limit 1
@@ -87,10 +87,10 @@ Deno.serve(async (request) => {
           from jsonb_array_elements(${tx.json(requestBody!.assignments)}) item
         )
         select game_private.process_claim(
-          ${requestBody!.gameId},
+          ${requestBody!.gameId}::uuid,
           ${requestBody!.bookCode}::public.literature_book_code,
           assignment_array.values,
-          ${user.id}
+          ${user.id}::uuid
         ) as result
         from assignment_array
       `;

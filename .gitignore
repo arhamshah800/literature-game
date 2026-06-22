@@ -8,3 +8,5 @@ coverage/
 .turbo/
 .vercel/
 .supabase/
+.vercel
+.env*

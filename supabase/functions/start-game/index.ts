@@ -28,13 +28,13 @@ Deno.serve(async (request) => {
       const playerRows = await tx`
         select id
         from public.game_players
-        where game_id = ${requestBody!.gameId}
-          and user_id = ${user.id}
+        where game_id = ${requestBody!.gameId}::uuid
+          and user_id = ${user.id}::uuid
       `;
       playerId = playerRows[0]?.id ?? null;
 
       await tx`
-        select game_private.initialize_game(${requestBody!.gameId}, ${user.id}) as result
+        select game_private.initialize_game(${requestBody!.gameId}::uuid, ${user.id}::uuid) as result
       `;
 
       const responsePayload = {
