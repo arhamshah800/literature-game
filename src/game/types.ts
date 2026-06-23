@@ -119,6 +119,7 @@ export type PublicGameState = {
   status: GameStatus;
   playerCount: PlayerCount;
   currentTurnPlayerId: string | null;
+  teamNames: Record<TeamIndex, string>;
   version: number;
   players: PublicPlayerState[];
   books: PublicBookState[];

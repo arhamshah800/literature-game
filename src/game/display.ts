@@ -1,4 +1,5 @@
 import { CARD_BY_CODE } from "./cards";
+import { DEFAULT_TEAM_NAMES } from "./teamNames";
 import type { BookCode, CardCode, TeamIndex } from "./types";
 
 export const bookLabels: Record<BookCode, string> = {
@@ -13,10 +14,11 @@ export const bookLabels: Record<BookCode, string> = {
   eights_jokers: "8s + Jokers"
 };
 
-export const teamNames: Record<TeamIndex, string> = {
-  0: "North",
-  1: "South"
-};
+export const teamNames: Record<TeamIndex, string> = DEFAULT_TEAM_NAMES;
+
+export function getTeamName(teamNamesValue: Partial<Record<TeamIndex, string>> | undefined, teamIndex: TeamIndex) {
+  return teamNamesValue?.[teamIndex] || DEFAULT_TEAM_NAMES[teamIndex];
+}
 
 export function formatCard(cardCode: CardCode | string) {
   if (cardCode === "JOKER_RED") return "Red Joker";

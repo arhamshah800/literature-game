@@ -24,3 +24,6 @@ verify_jwt = true
 
 [functions.submit-claim]
 verify_jwt = true
+
+[functions.update-team-names]
+verify_jwt = true

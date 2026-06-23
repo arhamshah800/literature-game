@@ -8,6 +8,10 @@ export async function getPublicState(sql: SqlClient, gameId: string): Promise<un
       'status', g.status,
       'playerCount', g.player_count,
       'currentTurnPlayerId', g.current_turn_player_id,
+      'teamNames', jsonb_build_object(
+        '0', coalesce(g.team_zero_name, 'Team 1'),
+        '1', coalesce(g.team_one_name, 'Team 2')
+      ),
       'version', g.version,
       'players', coalesce((
         select jsonb_agg(

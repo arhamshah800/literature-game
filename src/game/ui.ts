@@ -187,6 +187,40 @@ export function hasCompactTable(metrics: Pick<TableLayoutMetrics, "width" | "hei
   return metrics.width < 720 || metrics.height < 560;
 }
 
+export function buildTeamRailSeatPositions(
+  players: readonly Pick<PublicPlayerState, "seatIndex" | "teamIndex">[],
+  metrics: Pick<TableLayoutMetrics, "width" | "height">
+): SeatPosition[] {
+  const width = Math.max(metrics.width, 320);
+  const height = Math.max(metrics.height, 360);
+  const railInset = width < 420 ? 64 : 82;
+  const top = Math.max(84, height * 0.24);
+  const bottom = Math.min(height - 58, height * 0.82);
+  const byTeam = [0, 1].map((teamIndex) =>
+    players
+      .filter((player) => player.teamIndex === teamIndex)
+      .sort((left, right) => left.seatIndex - right.seatIndex)
+  ) as [
+    Array<Pick<PublicPlayerState, "seatIndex" | "teamIndex">>,
+    Array<Pick<PublicPlayerState, "seatIndex" | "teamIndex">>
+  ];
+  const seats: SeatPosition[] = [];
+
+  byTeam.forEach((teamPlayers, teamIndex) => {
+    const ySlots = distributedSlots(top, bottom, teamPlayers.length);
+    const x = teamIndex === 0 ? railInset : width - railInset;
+    teamPlayers.forEach((player, index) => {
+      seats[player.seatIndex] = {
+        x: x / width * 100,
+        y: (ySlots[index] ?? (top + bottom) / 2) / height * 100,
+        angle: teamIndex === 0 ? -90 : 90
+      };
+    });
+  });
+
+  return seats;
+}
+
 export function buildHandLayout(input: { containerWidth: number; groupCount: number; cardCount: number }): HandLayout {
   const width = Math.max(input.containerWidth, 320);
   const groupCount = Math.max(input.groupCount, 1);
@@ -219,6 +253,10 @@ export function findCollisions(rects: readonly LayoutRect[], gap = 0): Collision
     }
   }
   return collisions;
+}
+
+export function missAnnouncementText(targetName: string, cardName: string) {
+  return `${targetName} did not have ${cardName}.`;
 }
 
 export function buildRequestCardOptions(input: {
@@ -411,6 +449,13 @@ export function effectFromEvent(event: ClientGameEvent): TableEffect[] {
         kind: "celebration",
         teamIndex: event.payload.winningTeamIndex,
         text: "Game complete"
+      }];
+    case "teams.renamed":
+      return [{
+        id: `${event.id}:teams-renamed`,
+        kind: "announcement",
+        tone: "claim",
+        text: "Team names updated."
       }];
     default:
       return [];

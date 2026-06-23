@@ -6,6 +6,7 @@ import type {
   GameCompletedPayload,
   GameStartedPayload,
   PlayerJoinedPayload,
+  TeamsRenamedPayload,
   TurnChangedPayload
 } from "./events";
 
@@ -18,6 +19,7 @@ export type ClientGameEvent =
   | ClientEvent<"turn.changed", TurnChangedPayload>
   | ClientEvent<"claim.resolved", ClaimResolvedPayload>
   | ClientEvent<"game.completed", GameCompletedPayload>
+  | ClientEvent<"teams.renamed", TeamsRenamedPayload>
   | ClientEvent<"teams.randomized", Record<string, never>>;
 
 export type ClientEvent<TType extends string, TPayload> = {
@@ -37,6 +39,7 @@ const knownEvents = new Set([
   "turn.changed",
   "claim.resolved",
   "game.completed",
+  "teams.renamed",
   "teams.randomized"
 ]);
 

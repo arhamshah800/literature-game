@@ -50,6 +50,7 @@ select {
   .table-top {
     height: clamp(340px, 48svh, 640px);
     min-height: 0;
+    min-width: 0;
     @apply relative overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(ellipse_at_center,#16837c_0%,#116a6c_42%,#144353_72%,#16203c_100%)] shadow-soft;
   }
 
@@ -70,7 +71,56 @@ select {
   }
 
   .hand-dock {
+    min-width: 0;
     @apply rounded-2xl border border-white/15 bg-zinc-950/45 p-3 shadow-soft backdrop-blur-xl sm:p-4;
+  }
+
+  .team-name-editor {
+    @apply grid gap-3;
+  }
+
+  .team-name-fields {
+    @apply grid min-w-0 gap-2 sm:grid-cols-2;
+  }
+
+  .team-name-field {
+    @apply grid min-w-0 gap-1 text-xs font-black uppercase tracking-[0.14em] text-white/60;
+  }
+
+  .team-name-field input {
+    @apply min-w-0;
+  }
+
+  .team-name-save {
+    @apply w-full;
+  }
+
+  .team-name-error {
+    @apply rounded-md border border-rose-200/40 bg-rose-950/45 px-3 py-2 text-xs font-bold text-rose-100;
+  }
+
+  .team-name-editor.compact {
+    @apply gap-2;
+  }
+
+  .team-name-editor.compact .team-name-fields {
+    @apply grid-cols-1 md:grid-cols-2;
+  }
+
+  .team-name-drawer {
+    @apply mb-3 rounded-xl border border-white/10 bg-black/20 p-3 text-white;
+  }
+
+  .team-name-drawer summary {
+    @apply cursor-pointer text-sm font-black;
+  }
+
+  .team-name-drawer .team-name-editor {
+    @apply mt-3;
+  }
+
+  .team-name-drawer:not([open]) .team-name-editor {
+    display: none;
   }
 
   .hand-fan-shell {
@@ -210,6 +260,7 @@ select {
   }
 
   .book-ribbon {
+    min-width: 0;
     @apply relative z-10 flex w-full gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-zinc-950/45 p-2 shadow-soft backdrop-blur-xl;
     scrollbar-width: thin;
   }
@@ -219,7 +270,7 @@ select {
   }
 
   .score-badge {
-    @apply grid min-w-20 shrink-0 rounded-xl bg-gradient-to-br px-3 py-2 text-zinc-950 shadow-card;
+    @apply grid min-w-20 max-w-36 shrink-0 rounded-xl bg-gradient-to-br px-3 py-2 text-zinc-950 shadow-card;
   }
 
   .compact-game .room-pill {
@@ -227,7 +278,7 @@ select {
   }
 
   .score-badge span {
-    @apply text-[10px] font-black uppercase tracking-[0.14em];
+    @apply truncate text-[10px] font-black uppercase tracking-[0.14em];
   }
 
   .score-badge strong {
@@ -271,12 +322,97 @@ select {
     @apply border-amber-100/70 bg-amber-100/95 text-zinc-950;
   }
 
+  .compact-announcement-strip {
+    @apply relative z-20 grid min-h-0 place-items-center;
+  }
+
+  .compact-announcement-strip .center-announcement {
+    @apply w-full max-w-xl px-4 py-3 text-center text-sm sm:text-base;
+  }
+
   .seat-nameplate {
     @apply mt-2 w-full rounded-full border border-white/15 bg-black/35 px-3 py-1 text-center text-xs font-black text-white backdrop-blur;
   }
 
   .seat-card-backs {
     @apply mt-2 flex max-w-full justify-center -space-x-2 overflow-hidden px-1;
+  }
+
+  .mobile-team-rails {
+    @apply pointer-events-none absolute inset-x-2 bottom-10 top-20 z-10;
+  }
+
+  .mobile-team-rail {
+    width: clamp(8rem, 34vw, 14rem);
+    @apply absolute bottom-0 top-0 flex min-w-0 flex-col gap-2;
+  }
+
+  .mobile-team-rail.team-north {
+    @apply left-0;
+  }
+
+  .mobile-team-rail.team-south {
+    @apply right-0 items-end text-right;
+  }
+
+  .mobile-team-rail h3 {
+    @apply max-w-full truncate rounded-full border border-white/15 bg-black/30 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white/75 backdrop-blur;
+  }
+
+  .mobile-team-pills {
+    @apply flex min-w-0 flex-1 flex-col justify-around gap-1;
+  }
+
+  .mobile-player-pill {
+    @apply pointer-events-auto relative grid min-h-12 min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 rounded-xl border border-white/10 bg-zinc-950/45 px-2 py-2 text-left text-white shadow-card backdrop-blur;
+  }
+
+  .mobile-player-pill.active {
+    @apply border-cyan-100 bg-cyan-100/20 ring-2 ring-cyan-100/35;
+  }
+
+  .mobile-player-pill.me {
+    @apply border-white/40;
+  }
+
+  .mobile-player-pill.dimmed {
+    @apply opacity-50;
+  }
+
+  .mobile-player-avatar {
+    @apply grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/85 text-xs font-black text-zinc-950;
+  }
+
+  .mobile-player-copy {
+    @apply grid min-w-0;
+  }
+
+  .mobile-player-copy strong {
+    @apply truncate text-xs font-black leading-tight;
+  }
+
+  .mobile-player-copy em {
+    @apply not-italic text-[10px] font-bold leading-tight text-white/60;
+  }
+
+  .mobile-mini-bubble {
+    @apply absolute bottom-[calc(100%+0.25rem)] left-1/2 max-w-28 -translate-x-1/2 truncate rounded-full px-2 py-1 text-[10px] font-black text-zinc-950 shadow-card;
+  }
+
+  .mobile-mini-bubble.ask {
+    @apply bg-cyan-100;
+  }
+
+  .mobile-mini-bubble.miss {
+    @apply bg-rose-100;
+  }
+
+  .mobile-mini-bubble.join {
+    @apply bg-emerald-100;
+  }
+
+  .mobile-mini-bubble.claim {
+    @apply bg-amber-100;
   }
 
   @media (max-width: 640px) {
@@ -311,6 +447,34 @@ select {
 
     .center-announcement {
       @apply px-3 py-3 text-sm;
+    }
+
+    .score-badge {
+      @apply max-w-28 px-2;
+    }
+
+    .score-badge strong {
+      @apply text-xl;
+    }
+
+    .mobile-team-rails {
+      @apply inset-x-2 bottom-4 top-36;
+    }
+
+    .mobile-team-rail {
+      width: clamp(7.25rem, 34vw, 9rem);
+    }
+
+    .mobile-team-rail h3 {
+      display: none;
+    }
+
+    .mobile-player-pill {
+      @apply min-h-10 grid-cols-[1.75rem_minmax(0,1fr)] gap-1 rounded-lg px-1.5 py-1.5;
+    }
+
+    .mobile-player-avatar {
+      @apply h-7 w-7 rounded-md text-[10px];
     }
 
     .hand-group {

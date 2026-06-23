@@ -4,11 +4,14 @@ import {
   buildHandLayout,
   buildRequestCardOptions,
   buildTableLayout,
+  buildTeamRailSeatPositions,
   deriveHandFilters,
   effectFromEvent,
   findCollisions,
+  missAnnouncementText,
   seatPosition
 } from "../src/game/ui";
+import { validateTeamNames } from "../src/game/teamNames";
 import type { MyHandState, PublicGameState, PublicPlayerState } from "../src/game/types";
 
 const players: PublicPlayerState[] = [
@@ -23,6 +26,7 @@ const state: PublicGameState = {
   status: "active",
   playerCount: 4,
   currentTurnPlayerId: "p1",
+  teamNames: { 0: "Team 1", 1: "Team 2" },
   version: 1,
   players,
   books: [
@@ -79,6 +83,18 @@ describe("table seating", () => {
 
     expect(collisions).toEqual([]);
   });
+
+  it("assigns compact mobile seats to opposing team rails", () => {
+    const seats = buildTeamRailSeatPositions(players, { width: 390, height: 520 });
+
+    expect(seats[0]?.x).toBeLessThan(40);
+    expect(seats[2]?.x).toBeLessThan(40);
+    expect(seats[1]?.x).toBeGreaterThan(60);
+    for (const seat of seats.filter(Boolean)) {
+      expect(seat.y).toBeGreaterThanOrEqual(15);
+      expect(seat.y).toBeLessThanOrEqual(86);
+    }
+  });
 });
 
 describe("hand layout", () => {
@@ -115,6 +131,13 @@ describe("request card options", () => {
 });
 
 describe("event effects", () => {
+  it("formats miss announcements without Go Fish wording", () => {
+    const text = missAnnouncementText("Bo", "the Queen of Hearts");
+
+    expect(text).toBe("Bo did not have the Queen of Hearts.");
+    expect(text).not.toContain("Go Fish");
+  });
+
   it("adapts realtime broadcasts and maps transfers to a table animation effect", () => {
     const event = adaptRealtimePayload({
       event: "card.transferred",
@@ -139,5 +162,16 @@ describe("event effects", () => {
         expect.objectContaining({ kind: "announcement", tone: "hit", targetPlayerId: "p2", askerPlayerId: "p1" })
       ])
     );
+  });
+});
+
+describe("team names", () => {
+  it("trims valid team names and rejects empty or long names", () => {
+    expect(validateTeamNames({ 0: "  North Stars  ", 1: "South  Squad" })).toEqual({
+      0: "North Stars",
+      1: "South Squad"
+    });
+    expect(() => validateTeamNames({ 0: " ", 1: "Team 2" })).toThrow("Team 1 name is required.");
+    expect(() => validateTeamNames({ 0: "Team 1", 1: "x".repeat(25) })).toThrow("24 characters");
   });
 });

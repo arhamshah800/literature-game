@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { BOOK_CODES, CARD_CATALOG, getCardsForBook } from "./game/cards";
 import { adaptRealtimePayload } from "./game/clientEvents";
-import { bookLabels, formatCard, teamNames } from "./game/display";
+import { bookLabels, formatCard, getTeamName } from "./game/display";
 import { buildRequestCardOptions, effectFromEvent, type TableEffect } from "./game/ui";
 import type {
   BookCode,
@@ -33,6 +33,7 @@ import type {
 import { CardCarousel } from "./components/CardCarousel";
 import { GameCard } from "./components/GameCard";
 import { GameTable } from "./components/GameTable";
+import { TeamNameEditor } from "./components/TeamNameEditor";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import "./styles.css";
 
@@ -44,6 +45,7 @@ type BusyAction =
   | "load"
   | "start"
   | "randomize"
+  | "renameTeams"
   | "ask"
   | "claim"
   | null;
@@ -425,6 +427,24 @@ function App() {
     });
   }
 
+  async function updateTeamNames(teamNamesValue: Record<TeamIndex, string>) {
+    if (!state) return;
+    armAudio();
+    await run("renameTeams", async () => {
+      const result = await invokeGameFunction<{ state: PublicGameState; myHand?: MyHandState }>("update-team-names", {
+        gameId: state.gameId,
+        teamNames: teamNamesValue
+      });
+      setState(result.state);
+      if (result.myHand) {
+        setHand({
+          ...result.myHand,
+          cards: [...result.myHand.cards].sort((left, right) => left.sortIndex - right.sortIndex)
+        });
+      }
+    });
+  }
+
   async function startGame() {
     if (!state) return;
     armAudio();
@@ -510,6 +530,7 @@ function App() {
           onPlayerCount={setPlayerCount}
           onRandomize={() => void randomizeTeams()}
           onStart={() => void startGame()}
+          onTeamNames={(teamNamesValue) => void updateTeamNames(teamNamesValue)}
         />
       ) : state ? (
         <>
@@ -517,6 +538,7 @@ function App() {
             busyAction={busyAction}
             effects={effects}
             hand={hand}
+            isHost={isHost}
             isMyTurn={isMyTurn}
             me={me}
             selectedCard={selectedCard}
@@ -526,6 +548,7 @@ function App() {
             onClaimOpen={setClaimOpen}
             onEmote={addLocalBubble}
             onSelectCard={setSelectedCard}
+            onTeamNames={(teamNamesValue) => void updateTeamNames(teamNamesValue)}
             onToggleSound={() => {
               armAudio();
               setSoundMuted((current) => {
@@ -620,6 +643,7 @@ function LobbyView(props: {
   onPlayerCount: (value: PlayerCount) => void;
   onRandomize: () => void;
   onStart: () => void;
+  onTeamNames: (teamNames: Record<TeamIndex, string>) => void;
 }) {
   const waiting = props.state?.status === "waiting";
   return (
@@ -674,16 +698,28 @@ function LobbyView(props: {
           </button>
         </div>
         {waiting && props.isHost ? (
-          <div className="mt-5 grid grid-cols-2 gap-2">
-            <button className="secondary-button border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onRandomize} disabled={props.busyAction === "randomize"}>
-              <Shuffle className="h-4 w-4" />
-              Teams
-            </button>
-            <button className="primary-button" onClick={props.onStart} disabled={!props.canStart || props.busyAction === "start"}>
-              <Play className="h-4 w-4" />
-              Start
-            </button>
-          </div>
+          <>
+            {props.state ? (
+              <div className="mt-5 rounded-xl border border-white/10 bg-white/10 p-3">
+                <h3 className="mb-3 text-sm font-black">Team names</h3>
+                <TeamNameEditor
+                  busy={props.busyAction === "renameTeams"}
+                  teamNames={props.state.teamNames}
+                  onSubmit={props.onTeamNames}
+                />
+              </div>
+            ) : null}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button className="secondary-button border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onRandomize} disabled={props.busyAction === "randomize"}>
+                <Shuffle className="h-4 w-4" />
+                Teams
+              </button>
+              <button className="primary-button" onClick={props.onStart} disabled={!props.canStart || props.busyAction === "start"}>
+                <Play className="h-4 w-4" />
+                Start
+              </button>
+            </div>
+          </>
         ) : null}
       </section>
       <section className="panel min-h-[520px] rounded-xl p-4 text-white sm:p-5">
@@ -698,7 +734,12 @@ function LobbyView(props: {
               </div>
               <SeatMeter total={props.state.playerCount} filled={props.state.players.length} />
             </div>
-            <TeamGrid players={props.state.players} currentTurnPlayerId={props.state.currentTurnPlayerId} totalSeats={props.state.playerCount} />
+            <TeamGrid
+              currentTurnPlayerId={props.state.currentTurnPlayerId}
+              players={props.state.players}
+              teamNames={props.state.teamNames}
+              totalSeats={props.state.playerCount}
+            />
           </>
         ) : (
           <div className="flex min-h-[480px] items-center justify-center rounded-xl border border-dashed border-white/20 bg-white/10">
@@ -838,11 +879,13 @@ function TeamGrid({
   compact = false,
   currentTurnPlayerId,
   players,
+  teamNames,
   totalSeats
 }: {
   compact?: boolean;
   currentTurnPlayerId: string | null;
   players: PublicPlayerState[];
+  teamNames?: Record<TeamIndex, string>;
   totalSeats?: number;
 }) {
   const teams = [0, 1].map((teamIndex) => players.filter((player) => player.teamIndex === teamIndex)) as [PublicPlayerState[], PublicPlayerState[]];
@@ -851,7 +894,7 @@ function TeamGrid({
       {teams.map((teamPlayers, index) => (
         <div key={index} className="rounded-xl border border-white/10 bg-white/10 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-black">{teamNames[index as TeamIndex]}</h3>
+            <h3 className="font-black">{getTeamName(teamNames, index as TeamIndex)}</h3>
             <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-bold text-white/65">
               {teamPlayers.length}
               {totalSeats ? ` / ${Math.ceil(totalSeats / 2)}` : ""}
@@ -918,6 +961,7 @@ function DevTableDemo() {
     status: "active",
     playerCount: 8,
     currentTurnPlayerId: "p1",
+    teamNames: { 0: "Team Alpha", 1: "Team Bravo" },
     version: 1,
     players,
     books: BOOK_CODES.map((bookCode, index) => ({
@@ -947,6 +991,7 @@ function DevTableDemo() {
           }
         ]}
         hand={hand}
+        isHost
         isMyTurn
         me={players[0] ?? null}
         selectedCard={selectedCard}
@@ -956,6 +1001,7 @@ function DevTableDemo() {
         onClaimOpen={() => undefined}
         onEmote={() => undefined}
         onSelectCard={setSelectedCard}
+        onTeamNames={() => undefined}
         onToggleSound={() => undefined}
       />
     </Shell>

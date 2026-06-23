@@ -65,6 +65,10 @@ export type GameCompletedPayload = {
   teamScores: Record<"0" | "1", number>;
 };
 
+export type TeamsRenamedPayload = {
+  teamNames: Record<TeamIndex, string>;
+};
+
 export type KnownGameEvent =
   | GameEvent<PlayerJoinedPayload>
   | GameEvent<GameStartedPayload>
@@ -73,4 +77,5 @@ export type KnownGameEvent =
   | GameEvent<AskMissedPayload>
   | GameEvent<TurnChangedPayload>
   | GameEvent<ClaimResolvedPayload>
-  | GameEvent<GameCompletedPayload>;
+  | GameEvent<GameCompletedPayload>
+  | GameEvent<TeamsRenamedPayload>;
