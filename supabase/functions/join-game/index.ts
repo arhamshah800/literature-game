@@ -3,6 +3,7 @@ import { createSqlClient, insertGameEvent, logAction } from "../_shared/db.ts";
 import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_shared/http.ts";
 import { teamForSeat } from "../_shared/lobby.ts";
 import { ensureProfile, getPublicState } from "../_shared/state.ts";
+import { validateDisplayName, validateLobbyCode } from "../_shared/validation.ts";
 
 type JoinGameRequest = {
   lobbyCode: string;
@@ -21,12 +22,8 @@ Deno.serve(async (request) => {
     const user = await requireUser(request);
     userId = user.id;
     requestBody = await readJsonBody<JoinGameRequest>(request);
-    const lobbyCode = requestBody.lobbyCode?.trim().toUpperCase();
-    if (!lobbyCode) {
-      throw new Error("lobbyCode is required.");
-    }
-
-    const displayName = requestBody.displayName?.trim() || user.email || "Player";
+    const lobbyCode = validateLobbyCode(requestBody.lobbyCode);
+    const displayName = validateDisplayName(requestBody.displayName);
 
     const result = await sql.begin(async (tx) => {
       await ensureProfile(tx, { userId: user.id, displayName });

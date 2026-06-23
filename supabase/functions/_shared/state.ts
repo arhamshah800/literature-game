@@ -109,6 +109,7 @@ export async function ensureProfile(
   await sql`
     insert into public.profiles (id, display_name)
     values (${input.userId}, ${input.displayName})
-    on conflict (id) do nothing
+    on conflict (id) do update
+      set display_name = excluded.display_name
   `;
 }

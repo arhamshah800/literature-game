@@ -3,6 +3,7 @@ import { createSqlClient, insertGameEvent, logAction } from "../_shared/db.ts";
 import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_shared/http.ts";
 import { generateLobbyCode, teamForSeat } from "../_shared/lobby.ts";
 import { ensureProfile, getPublicState } from "../_shared/state.ts";
+import { validateDisplayName } from "../_shared/validation.ts";
 import type { PlayerCount } from "../../../src/game/types.ts";
 
 type CreateGameRequest = {
@@ -31,7 +32,7 @@ Deno.serve(async (request) => {
       throw new Error("playerCount must be between 4 and 8.");
     }
 
-    const displayName = requestBody.displayName?.trim() || user.email || "Player";
+    const displayName = validateDisplayName(requestBody.displayName);
 
     const result = await sql.begin(async (tx) => {
       await ensureProfile(tx, { userId: user.id, displayName });

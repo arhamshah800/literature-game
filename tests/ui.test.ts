@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { adaptRealtimePayload } from "../src/game/clientEvents";
+import { lobbyCodeLength, normalizeJoinCode } from "../src/game/lobbyCode";
+import { maxDisplayNameLength, validateDisplayName } from "../src/game/playerNames";
 import {
   buildHandLayout,
   buildRequestCardOptions,
@@ -173,5 +175,18 @@ describe("team names", () => {
     });
     expect(() => validateTeamNames({ 0: " ", 1: "Team 2" })).toThrow("Team 1 name is required.");
     expect(() => validateTeamNames({ 0: "Team 1", 1: "x".repeat(25) })).toThrow("24 characters");
+  });
+});
+
+describe("name and room code limits", () => {
+  it("trims display names and rejects empty or too-long names", () => {
+    expect(validateDisplayName("  Sarah   Jane  ")).toBe("Sarah Jane");
+    expect(() => validateDisplayName(" ")).toThrow("Enter your name first.");
+    expect(() => validateDisplayName("x".repeat(maxDisplayNameLength + 1))).toThrow("24 characters");
+  });
+
+  it("normalizes join codes to six uppercase alphanumeric characters", () => {
+    expect(lobbyCodeLength).toBe(6);
+    expect(normalizeJoinCode(" ab-c12z9 ")).toBe("ABC12Z");
   });
 });

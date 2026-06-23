@@ -3,6 +3,7 @@ import { createSqlClient, insertGameEvent, logAction } from "../_shared/db.ts";
 import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_shared/http.ts";
 import { teamForSeat } from "../_shared/lobby.ts";
 import { ensureProfile, getPublicState } from "../_shared/state.ts";
+import { validateDisplayName } from "../_shared/validation.ts";
 
 type JoinRandomGameRequest = {
   displayName?: string;
@@ -21,7 +22,7 @@ Deno.serve(async (request) => {
     const user = await requireUser(request);
     userId = user.id;
     requestBody = await readJsonBody<JoinRandomGameRequest>(request);
-    const displayName = requestBody.displayName?.trim() || "Player";
+    const displayName = validateDisplayName(requestBody.displayName);
 
     const result = await sql.begin(async (tx) => {
       await ensureProfile(tx, { userId: user.id, displayName });

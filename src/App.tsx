@@ -18,6 +18,8 @@ import {
 import { BOOK_CODES, CARD_CATALOG, getCardsForBook } from "./game/cards";
 import { adaptRealtimePayload } from "./game/clientEvents";
 import { bookLabels, formatCard, getTeamName } from "./game/display";
+import { lobbyCodeLength, normalizeJoinCode } from "./game/lobbyCode";
+import { maxDisplayNameLength, validateDisplayName } from "./game/playerNames";
 import { buildRequestCardOptions, effectFromEvent, type TableEffect } from "./game/ui";
 import type {
   BookCode,
@@ -131,6 +133,7 @@ function App() {
   const [soundMuted, setSoundMuted] = useState(() => localStorage.getItem(soundMutedKey) === "true");
   const audioRef = useRef<AudioContext | null>(null);
   const audioArmedRef = useRef(false);
+  const lastAutoJoinKeyRef = useRef("");
 
   const view = state?.status === "active" || state?.status === "completed" ? "game" : "lobby";
   const me = useMemo(
@@ -338,11 +341,9 @@ function App() {
   }
 
   async function preparePlayer() {
-    const name = displayName.trim();
-    if (!name) {
-      throw new Error("Enter your name first.");
-    }
+    const name = validateDisplayName(displayName);
     localStorage.setItem(storedNameKey, name);
+    setDisplayName(name);
     await ensureAnonymousSession();
     return name;
   }
@@ -390,12 +391,16 @@ function App() {
     });
   }
 
-  async function joinGame() {
+  async function joinGame(codeOverride?: string) {
     armAudio();
     await run("join", async () => {
       const name = await preparePlayer();
+      const requestedCode = normalizeJoinCode(codeOverride ?? joinCode);
+      if (requestedCode.length !== lobbyCodeLength) {
+        throw new Error(`Enter the ${lobbyCodeLength}-character room code.`);
+      }
       const result = await invokeGameFunction<{ gameId: string; playerId: string; state: PublicGameState }>("join-game", {
-        lobbyCode: joinCode,
+        lobbyCode: requestedCode,
         displayName: name
       });
       setGameId(result.gameId);
@@ -404,6 +409,11 @@ function App() {
       localStorage.setItem(storedGameIdKey, result.gameId);
       localStorage.setItem(storedPlayerIdKey, result.playerId);
     });
+  }
+
+  function updateJoinCode(value: string) {
+    const nextCode = normalizeJoinCode(value);
+    setJoinCode(nextCode);
   }
 
   async function joinRandomGame() {
@@ -484,6 +494,20 @@ function App() {
     enqueueEffects([effect]);
   }
 
+  useEffect(() => {
+    if (state || busyAction || joinCode.length !== lobbyCodeLength) return;
+    try {
+      validateDisplayName(displayName);
+    } catch {
+      return;
+    }
+
+    const autoJoinKey = `${joinCode}:${displayName.trim()}`;
+    if (lastAutoJoinKeyRef.current === autoJoinKey) return;
+    lastAutoJoinKeyRef.current = autoJoinKey;
+    void joinGame(joinCode);
+  }, [busyAction, displayName, joinCode, state]);
+
   if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("demoTable")) {
     return <DevTableDemo />;
   }
@@ -527,10 +551,10 @@ function App() {
           playerCount={playerCount}
           state={state}
           onCreate={() => void createGame()}
-          onDisplayName={setDisplayName}
+          onDisplayName={(value) => setDisplayName(value.slice(0, maxDisplayNameLength))}
           onJoin={() => void joinGame()}
           onJoinRandom={() => void joinRandomGame()}
-          onJoinCode={setJoinCode}
+          onJoinCode={updateJoinCode}
           onPlayerCount={setPlayerCount}
           onRandomize={() => void randomizeTeams()}
           onStart={() => void startGame()}
@@ -650,6 +674,8 @@ function LobbyView(props: {
   onTeamNames: (teamNames: Record<TeamIndex, string>) => void;
 }) {
   const waiting = props.state?.status === "waiting";
+  const nameReady = props.displayName.trim().length > 0 && props.displayName.trim().length <= maxDisplayNameLength;
+  const joinCodeReady = props.joinCode.length === lobbyCodeLength;
   return (
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[360px_1fr]">
       <section className="panel rounded-xl p-4 text-white sm:p-5">
@@ -658,7 +684,13 @@ function LobbyView(props: {
           {props.state ? <LobbyCode code={props.state.lobbyCode} /> : null}
         </div>
         <div className="grid gap-4">
-          <input className="control border-white/20 bg-white/10 text-white placeholder:text-white/45" value={props.displayName} onChange={(event) => props.onDisplayName(event.target.value)} placeholder="Display name" />
+          <input
+            className="control border-white/20 bg-white/10 text-white placeholder:text-white/45"
+            maxLength={maxDisplayNameLength}
+            value={props.displayName}
+            onChange={(event) => props.onDisplayName(event.target.value)}
+            placeholder="Display name"
+          />
           <div className="rounded-xl border border-white/10 bg-white/10 p-3">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-black">Create a room</h3>
@@ -677,7 +709,7 @@ function LobbyView(props: {
                 </button>
               ))}
             </div>
-            <button className="primary-button w-full" onClick={props.onCreate} disabled={!props.displayName.trim() || props.busyAction === "create"}>
+            <button className="primary-button w-full" onClick={props.onCreate} disabled={!nameReady || props.busyAction === "create"}>
               {props.busyAction === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DoorOpen className="h-4 w-4" />}
               Create room
             </button>
@@ -687,16 +719,17 @@ function LobbyView(props: {
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
                 className="control uppercase border-white/20 bg-white/10 text-white placeholder:text-white/45"
+                maxLength={lobbyCodeLength}
                 value={props.joinCode}
-                onChange={(event) => props.onJoinCode(event.target.value.toUpperCase())}
+                onChange={(event) => props.onJoinCode(event.target.value)}
                 placeholder="Join code"
               />
-              <button className="secondary-button border-white/20 bg-white/10 px-3 text-white hover:bg-white/20" onClick={props.onJoin} disabled={!props.displayName.trim() || !props.joinCode || props.busyAction === "join"}>
+              <button className="secondary-button border-white/20 bg-white/10 px-3 text-white hover:bg-white/20" onClick={props.onJoin} disabled={!nameReady || !joinCodeReady || props.busyAction === "join"}>
                 {props.busyAction === "join" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
           </div>
-          <button className="secondary-button w-full border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onJoinRandom} disabled={!props.displayName.trim() || props.busyAction === "joinRandom"}>
+          <button className="secondary-button w-full border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={props.onJoinRandom} disabled={!nameReady || props.busyAction === "joinRandom"}>
             {props.busyAction === "joinRandom" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
             Join random game
           </button>
