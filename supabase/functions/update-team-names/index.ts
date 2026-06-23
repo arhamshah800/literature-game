@@ -2,12 +2,34 @@ import { requireUser } from "../_shared/auth.ts";
 import { createSqlClient, insertGameEvent, logAction } from "../_shared/db.ts";
 import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_shared/http.ts";
 import { getMyHand, getPublicState } from "../_shared/state.ts";
-import { validateTeamNames } from "../../../src/game/teamNames.ts";
 
 type UpdateTeamNamesRequest = {
   gameId: string;
   teamNames: Record<string, unknown>;
 };
+
+type TeamIndex = 0 | 1;
+
+const maxTeamNameLength = 24;
+
+function validateTeamName(value: unknown, label: string) {
+  const normalized = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (!normalized) {
+    throw new Error(`${label} name is required.`);
+  }
+  if (normalized.length > maxTeamNameLength) {
+    throw new Error(`${label} name must be ${maxTeamNameLength} characters or fewer.`);
+  }
+  return normalized;
+}
+
+function validateTeamNames(input: unknown): Record<TeamIndex, string> {
+  const value = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  return {
+    0: validateTeamName(value[0] ?? value["0"], "Team 1"),
+    1: validateTeamName(value[1] ?? value["1"], "Team 2")
+  };
+}
 
 Deno.serve(async (request) => {
   const options = handleOptions(request);

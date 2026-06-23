@@ -363,7 +363,11 @@ function App() {
   async function invokeGameFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
     const { data, error: responseError } = await supabase.functions.invoke<T>(name, { body });
     if (responseError) {
-      throw new Error(await getEdgeFunctionErrorMessage(responseError));
+      const message = await getEdgeFunctionErrorMessage(responseError);
+      if (message.includes("Failed to send a request to the Edge Function")) {
+        throw new Error(`Could not reach the ${name} Edge Function. Make sure Supabase migrations are pushed and this function is deployed.`);
+      }
+      throw new Error(message);
     }
     if (!data) throw new Error("No response returned.");
     return data;

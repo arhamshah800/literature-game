@@ -635,6 +635,7 @@ supabase db reset
 Deploy functions:
 
 ```bash
+supabase db push
 supabase functions deploy create-game
 supabase functions deploy join-game
 supabase functions deploy join-random-game
@@ -643,6 +644,7 @@ supabase functions deploy ask-card
 supabase functions deploy randomize-teams
 supabase functions deploy submit-claim
 supabase functions deploy get-game-state
+supabase functions deploy update-team-names
 ```
 
 Set function secrets:
