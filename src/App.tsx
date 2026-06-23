@@ -53,6 +53,12 @@ const storedPlayerIdKey = "literature.playerId";
 const storedNameKey = "literature.displayName";
 const soundMutedKey = "literature.soundMuted";
 const playerCountOptions = [4, 5, 6, 7, 8] as const;
+const notSeatedError = "You are not seated in this game.";
+
+type EdgeFunctionErrorContext = {
+  json?: () => Promise<unknown>;
+  text?: () => Promise<string>;
+};
 
 function hashRequestKey(value: string) {
   let hash = 5381;
@@ -73,6 +79,36 @@ function getOrCreateRequestId(storageKey: string) {
   const requestId = crypto.randomUUID();
   localStorage.setItem(storageKey, requestId);
   return requestId;
+}
+
+async function getEdgeFunctionErrorMessage(responseError: Error) {
+  const context = (responseError as Error & { context?: EdgeFunctionErrorContext }).context;
+
+  if (context?.json) {
+    try {
+      const body = await context.json();
+      if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
+        return body.error;
+      }
+    } catch (caught) {
+      if (!(caught instanceof Error) || caught.message !== "Body is unusable") {
+        throw caught;
+      }
+    }
+  }
+
+  if (context?.text) {
+    try {
+      const text = await context.text();
+      if (text) return text;
+    } catch (caught) {
+      if (!(caught instanceof Error) || caught.message !== "Body is unusable") {
+        throw caught;
+      }
+    }
+  }
+
+  return responseError.message;
 }
 
 function App() {
@@ -171,7 +207,14 @@ function App() {
       state: PublicGameState;
       myHand: MyHandState;
     }>(`get-game-state?gameId=${encodeURIComponent(targetGameId)}`, { method: "GET" });
-    if (responseError) throw responseError;
+    if (responseError) {
+      const message = await getEdgeFunctionErrorMessage(responseError);
+      if (message === notSeatedError) {
+        leaveLocalGame();
+        throw new Error("Your saved room is no longer available. Create or join a room to keep playing.");
+      }
+      throw new Error(message);
+    }
     if (data?.state) setState(data.state);
     if (data?.myHand) {
       setHand({
@@ -248,7 +291,7 @@ function App() {
 
       try {
         const body = await context.json();
-        if (body && typeof body === "object" && "error" in body && body.error === "You are not seated in this game.") {
+        if (body && typeof body === "object" && "error" in body && body.error === notSeatedError) {
           leaveLocalGame();
         }
       } catch {
@@ -318,26 +361,7 @@ function App() {
   async function invokeGameFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
     const { data, error: responseError } = await supabase.functions.invoke<T>(name, { body });
     if (responseError) {
-      const context = responseError.context as { json?: () => Promise<unknown>; text?: () => Promise<string> } | undefined;
-      if (context?.json) {
-        try {
-          const body = await context.json();
-          if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
-            throw new Error(body.error);
-          }
-        } catch (caught) {
-          if (caught instanceof Error && caught.message !== "Body is unusable") throw caught;
-        }
-      }
-      if (context?.text) {
-        try {
-          const text = await context.text();
-          if (text) throw new Error(text);
-        } catch (caught) {
-          if (caught instanceof Error && caught.message !== "Body is unusable") throw caught;
-        }
-      }
-      throw responseError;
+      throw new Error(await getEdgeFunctionErrorMessage(responseError));
     }
     if (!data) throw new Error("No response returned.");
     return data;
