@@ -124,6 +124,7 @@ select {
   }
 
   .hand-fan-shell {
+    user-select: none;
     @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 p-2 sm:p-3;
   }
 
@@ -152,6 +153,37 @@ select {
     @apply min-w-0 overflow-x-auto overflow-y-hidden pb-3;
     scroll-snap-type: x mandatory;
     scrollbar-width: thin;
+  }
+
+  .hand-all-scroll {
+    @apply min-w-0 overflow-x-auto overflow-y-hidden pb-4;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+
+  .hand-all-fan {
+    min-width: max-content;
+    min-height: 14.5rem;
+    padding: 3.25rem clamp(1rem, 8vw, 5rem) 1.75rem;
+    @apply flex items-end;
+  }
+
+  .hand-all-card-slot {
+    transform-origin: center bottom;
+    width: 3.35rem;
+    scroll-snap-align: center;
+    @apply shrink-0 cursor-pointer outline-none;
+  }
+
+  .hand-all-card-slot:focus-visible .game-card {
+    box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.75), 0 22px 44px rgba(0, 0, 0, 0.34);
+  }
+
+  .hand-all-card-slot .game-card {
+    pointer-events: none;
   }
 
   .hand-group-grid {
@@ -479,6 +511,19 @@ select {
 
     .hand-group {
       min-height: 13.75rem;
+    }
+
+    .hand-all-fan {
+      min-height: 12.75rem;
+      padding: 2.75rem 1.75rem 1.25rem;
+    }
+
+    .hand-all-card-slot + .hand-all-card-slot {
+      margin-left: 0;
+    }
+
+    .hand-all-card-slot {
+      width: 2.55rem;
     }
 
     .hand-group-cards {

@@ -10,6 +10,7 @@ type GameCardProps = {
   disabled?: boolean;
   glow?: boolean;
   onClick?: (() => void) | undefined;
+  passive?: boolean;
   selected?: boolean;
   size?: "tiny" | "small" | "medium" | "large";
   title?: string | undefined;
@@ -29,6 +30,7 @@ export function GameCard({
   disabled = false,
   glow = false,
   onClick,
+  passive = false,
   selected = false,
   size = "medium",
   title
@@ -60,12 +62,14 @@ export function GameCard({
       className={[
         "game-card relative shrink-0 overflow-hidden rounded-lg border text-left shadow-card outline-none",
         sizeClasses[size],
-        disabled ? "cursor-not-allowed opacity-35 saturate-0 blur-[0.35px]" : "cursor-pointer",
+        disabled ? "cursor-not-allowed opacity-35 saturate-0 blur-[0.35px]" : onClick || passive ? "cursor-pointer" : "cursor-default",
         selected ? "selected-card" : "",
         glow ? "received-card" : "",
         back ? "card-back border-white/30 bg-ink" : "border-white/70 bg-cardFace"
       ].join(" ")}
-      disabled={disabled || !onClick}
+      aria-hidden={passive ? true : undefined}
+      disabled={disabled || (!onClick && !passive)}
+      tabIndex={passive ? -1 : undefined}
       title={title ?? (resolved ? formatCard(resolved.code) : "Card back")}
       animate={selected ? { y: -28, scale: 1.06, rotate: 0 } : { y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 360, damping: 24 }}
