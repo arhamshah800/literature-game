@@ -44,12 +44,17 @@ select {
   }
 
   .game-scene {
-    @apply mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4;
+    @apply mx-auto grid max-w-7xl gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4;
   }
 
   .table-top {
-    min-height: clamp(500px, 64vh, 720px);
+    height: clamp(340px, 48svh, 640px);
+    min-height: 0;
     @apply relative overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(ellipse_at_center,#16837c_0%,#116a6c_42%,#144353_72%,#16203c_100%)] shadow-soft;
+  }
+
+  .compact-table {
+    height: clamp(320px, 42svh, 520px);
   }
 
   .table-top::before {
@@ -65,15 +70,37 @@ select {
   }
 
   .hand-dock {
-    @apply rounded-2xl border border-white/15 bg-zinc-950/45 p-4 shadow-soft backdrop-blur-xl;
+    @apply rounded-2xl border border-white/15 bg-zinc-950/45 p-3 shadow-soft backdrop-blur-xl sm:p-4;
   }
 
   .hand-fan-shell {
-    @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 p-3;
+    @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 p-2 sm:p-3;
+  }
+
+  .hand-filter-bar {
+    @apply mb-2 flex max-w-full gap-2 overflow-x-auto rounded-xl border border-white/10 bg-black/20 p-2;
+    scrollbar-width: thin;
+  }
+
+  .hand-filter {
+    @apply inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-white/15 bg-white/10 px-3 text-xs font-black text-white transition hover:bg-white/20;
+  }
+
+  .hand-filter.active {
+    @apply border-cyan-100 bg-cyan-100 text-zinc-950;
+  }
+
+  .hand-navigation-row {
+    @apply grid grid-cols-[auto_minmax(0,1fr)_auto] items-stretch gap-2;
+  }
+
+  .hand-nav-button {
+    @apply grid h-full min-h-44 w-11 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-40;
   }
 
   .hand-group-scroll {
-    @apply overflow-x-auto overflow-y-visible pb-3;
+    @apply min-w-0 overflow-x-auto overflow-y-hidden pb-3;
+    scroll-snap-type: x mandatory;
     scrollbar-width: thin;
   }
 
@@ -82,7 +109,17 @@ select {
   }
 
   .hand-group {
-    @apply grid min-h-64 w-[min(74vw,24rem)] content-start rounded-xl border border-white/10 bg-white/10 p-3 sm:w-80;
+    scroll-snap-align: start;
+    @apply grid min-h-56 w-[min(72vw,20rem)] content-start rounded-xl border border-white/10 bg-white/10 p-3 sm:min-h-64 sm:w-80;
+  }
+
+  .hand-fits .hand-group-grid {
+    grid-auto-columns: minmax(0, 1fr);
+    @apply w-full;
+  }
+
+  .hand-fits .hand-group {
+    @apply min-w-0 flex-1;
   }
 
   .hand-group-label {
@@ -98,7 +135,7 @@ select {
   }
 
   .hand-group-cards {
-    @apply flex min-h-40 items-end overflow-visible pl-1 pt-8;
+    @apply flex min-h-36 items-end overflow-visible pl-1 pt-8 sm:min-h-40;
   }
 
   .hand-card-slot {
@@ -106,7 +143,7 @@ select {
   }
 
   .hand-card-slot + .hand-card-slot {
-    margin-left: -2.55rem;
+    margin-left: -2.85rem;
   }
 
   .game-card {
@@ -128,7 +165,8 @@ select {
 
   .player-seat {
     width: clamp(7.5rem, 13vw, 11.5rem);
-    @apply absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center;
+    translate: -50% -50%;
+    @apply absolute z-10 flex flex-col items-center;
   }
 
   .seat-avatar {
@@ -173,6 +211,7 @@ select {
 
   .book-ribbon {
     @apply relative z-10 flex w-full gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-zinc-950/45 p-2 shadow-soft backdrop-blur-xl;
+    scrollbar-width: thin;
   }
 
   .book-token {
@@ -180,7 +219,11 @@ select {
   }
 
   .score-badge {
-    @apply grid min-w-20 rounded-xl bg-gradient-to-br px-3 py-2 text-zinc-950 shadow-card;
+    @apply grid min-w-20 shrink-0 rounded-xl bg-gradient-to-br px-3 py-2 text-zinc-950 shadow-card;
+  }
+
+  .compact-game .room-pill {
+    display: none;
   }
 
   .score-badge span {
@@ -192,11 +235,11 @@ select {
   }
 
   .table-chip {
-    @apply rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white transition hover:bg-white/20;
+    @apply inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-white/15 bg-white/10 px-3 text-xs font-black text-white transition hover:bg-white/20;
   }
 
   .table-action {
-    @apply h-12 rounded-xl;
+    @apply h-12 min-w-0 rounded-xl whitespace-nowrap;
   }
 
   .turn-indicator {
@@ -238,7 +281,7 @@ select {
 
   @media (max-width: 640px) {
     .table-top {
-      min-height: 540px;
+      height: clamp(320px, 42svh, 470px);
       border-radius: 1.25rem;
     }
 
@@ -271,7 +314,7 @@ select {
     }
 
     .hand-group {
-      min-height: 14.5rem;
+      min-height: 13.75rem;
     }
 
     .hand-group-cards {
@@ -279,7 +322,25 @@ select {
     }
 
     .hand-card-slot + .hand-card-slot {
-      margin-left: -3rem;
+      margin-left: -3.1rem;
+    }
+
+    .hand-nav-button {
+      @apply min-h-40 w-10;
+    }
+  }
+
+  @media (max-height: 760px) and (min-width: 641px) {
+    .table-top {
+      height: clamp(320px, 40svh, 460px);
+    }
+
+    .hand-group {
+      @apply min-h-56;
+    }
+
+    .hand-group-cards {
+      @apply min-h-36;
     }
   }
 }

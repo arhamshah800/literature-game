@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { adaptRealtimePayload } from "../src/game/clientEvents";
-import { buildRequestCardOptions, effectFromEvent, seatPosition } from "../src/game/ui";
+import {
+  buildHandLayout,
+  buildRequestCardOptions,
+  buildTableLayout,
+  deriveHandFilters,
+  effectFromEvent,
+  findCollisions,
+  seatPosition
+} from "../src/game/ui";
 import type { MyHandState, PublicGameState, PublicPlayerState } from "../src/game/types";
 
 const players: PublicPlayerState[] = [
@@ -53,6 +61,40 @@ describe("table seating", () => {
         expect(position.y).toBeLessThanOrEqual(78);
       }
     }
+  });
+
+  it("computes compact mode for constrained table dimensions", () => {
+    expect(buildTableLayout({ width: 640, height: 700, playerCount: 6 }).compact).toBe(true);
+    expect(buildTableLayout({ width: 1200, height: 640, playerCount: 6 }).compact).toBe(false);
+  });
+
+  it("keeps reserved HUD controls separated in representative layouts", () => {
+    const layout = buildTableLayout({ width: 1000, height: 620, playerCount: 6 });
+    const collisions = findCollisions([
+      { id: "score-icons", x: 16, y: 16, width: 176, height: 68 },
+      { id: "room-sound-icons", x: 760, y: 16, width: 224, height: 68 },
+      layout.zones.announcement,
+      layout.zones.turn
+    ], 8);
+
+    expect(collisions).toEqual([]);
+  });
+});
+
+describe("hand layout", () => {
+  it("switches between fit and scroll modes based on available width", () => {
+    expect(buildHandLayout({ containerWidth: 1280, groupCount: 3, cardCount: 12 })).toMatchObject({
+      mode: "fit",
+      showNavigation: false
+    });
+    expect(buildHandLayout({ containerWidth: 520, groupCount: 4, cardCount: 18 })).toMatchObject({
+      mode: "scroll",
+      showNavigation: true
+    });
+  });
+
+  it("derives set filters only from cards in hand", () => {
+    expect(deriveHandFilters(hand.cards)).toEqual(["all", "clubs_low"]);
   });
 });
 

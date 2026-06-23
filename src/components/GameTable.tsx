@@ -1,12 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Hand, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { bookLabels, formatCardName, initials, teamNames } from "../game/display";
-import { seatPosition, type TableEffect } from "../game/ui";
+import { buildTableLayout, type TableEffect, type TableLayout } from "../game/ui";
 import type { CardCode, MyHandState, PublicGameState, PublicPlayerState, TeamIndex } from "../game/types";
 import { GameCard } from "./GameCard";
 import { HandFan } from "./HandFan";
+import { useElementSize } from "./useElementSize";
 
 type GameTableProps = {
   busyAction: string | null;
@@ -39,9 +40,20 @@ export function GameTable({
   soundMuted,
   state
 }: GameTableProps) {
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const tableSize = useElementSize(tableRef);
   const scores = scoreBooks(state);
   const celebrationKey = effects.find((effect) => effect.kind === "celebration")?.id;
   const announcements = effects.filter((effect): effect is Extract<TableEffect, { kind: "announcement" }> => effect.kind === "announcement");
+  const layout = useMemo(
+    () => buildTableLayout({
+      width: tableSize.width || 1000,
+      height: tableSize.height || 620,
+      playerCount: state.playerCount
+    }),
+    [state.playerCount, tableSize.height, tableSize.width]
+  );
+  const [reflowPulse, setReflowPulse] = useState(0);
 
   useEffect(() => {
     if (!celebrationKey) return;
@@ -53,9 +65,30 @@ export function GameTable({
     });
   }, [celebrationKey]);
 
+  useEffect(() => {
+    if (!tableSize.width || !tableSize.height) return;
+    setReflowPulse((current) => current + 1);
+  }, [tableSize.height, tableSize.width]);
+
   return (
-    <div className="game-scene">
-      <div className="table-top">
+    <div className={`game-scene ${layout.compact ? "compact-game" : ""}`}>
+      <motion.div
+        ref={tableRef}
+        className={`table-top ${layout.compact ? "compact-table" : ""}`}
+        data-collision-zone="table"
+        transition={{ duration: 0.45 }}
+        {...(reflowPulse
+          ? {
+              animate: {
+                boxShadow: [
+                  "0 22px 60px rgba(0,0,0,0.22)",
+                  "0 0 0 3px rgba(103,232,249,0.36)",
+                  "0 22px 60px rgba(0,0,0,0.22)"
+                ]
+              }
+            }
+          : {})}
+      >
         <TableHud state={state} scores={scores} soundMuted={soundMuted} onToggleSound={onToggleSound} />
         <div className="absolute inset-0">
           {state.players.map((player) => (
@@ -63,13 +96,13 @@ export function GameTable({
               key={player.playerId}
               active={player.playerId === state.currentTurnPlayerId}
               effect={effects.find((item) => item.kind === "speech" && item.playerId === player.playerId)}
+              layout={layout}
               me={player.playerId === me?.playerId}
               player={player}
-              totalSeats={state.playerCount}
             />
           ))}
         </div>
-        <TransferLayer effects={effects} state={state} />
+        <TransferLayer effects={effects} layout={layout} state={state} />
         <CenterAnnouncements announcements={announcements} state={state} />
         <div className="turn-indicator">
           <motion.div
@@ -82,7 +115,7 @@ export function GameTable({
             {isMyTurn ? "Your turn" : `${state.players.find((player) => player.playerId === state.currentTurnPlayerId)?.displayName ?? "Waiting"} is up`}
           </motion.div>
         </div>
-      </div>
+      </motion.div>
       <BookRibbon state={state} />
 
       <section className="hand-dock">
@@ -99,11 +132,11 @@ export function GameTable({
         </div>
         <HandFan cards={hand?.cards ?? []} selectedCard={selectedCard} onSelect={onSelectCard} />
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <button className="primary-button table-action" onClick={() => onAskOpen(true)} disabled={!isMyTurn || busyAction === "ask"}>
+          <button className="primary-button table-action" onClick={() => onAskOpen(true)} disabled={!isMyTurn || busyAction === "ask"} data-collision-check="ask-action">
             <Hand className="h-4 w-4" />
             Request Card
           </button>
-          <button className="secondary-button table-action" onClick={() => onClaimOpen(true)} disabled={!isMyTurn || busyAction === "claim"}>
+          <button className="secondary-button table-action" onClick={() => onClaimOpen(true)} disabled={!isMyTurn || busyAction === "claim"} data-collision-check="claim-action">
             <Check className="h-4 w-4" />
             Claim Book
           </button>
@@ -128,15 +161,15 @@ function TableHud({
 }) {
   return (
     <div className="absolute left-4 right-4 top-4 z-10 flex items-center justify-between gap-3">
-      <div className="flex gap-2">
+      <div className="flex min-w-0 gap-2" data-collision-zone="score-controls">
         <ScoreBadge label={teamNames[0]} score={scores[0]} tone="north" />
         <ScoreBadge label={teamNames[1]} score={scores[1]} tone="south" />
       </div>
-      <div className="flex items-center gap-2">
-        <span className="hidden rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white/75 sm:inline-flex">
+      <div className="flex min-w-0 items-center justify-end gap-2" data-collision-zone="room-controls">
+        <span className="room-pill hidden rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white/75 sm:inline-flex">
           Room {state.lobbyCode}
         </span>
-        <button className="icon-button border-white/20 bg-white/15 text-white hover:bg-white/25" onClick={onToggleSound} title={soundMuted ? "Unmute sounds" : "Mute sounds"}>
+        <button className="icon-button shrink-0 border-white/20 bg-white/15 text-white hover:bg-white/25" onClick={onToggleSound} title={soundMuted ? "Unmute sounds" : "Mute sounds"} data-collision-check="sound-toggle">
           {soundMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </button>
       </div>
@@ -146,7 +179,7 @@ function TableHud({
 
 function ScoreBadge({ label, score, tone }: { label: string; score: number; tone: "north" | "south" }) {
   return (
-    <div className={`score-badge ${tone === "north" ? "from-emerald-300/80 to-cyan-300/80" : "from-rose-300/80 to-amber-200/80"}`}>
+    <div className={`score-badge ${tone === "north" ? "from-emerald-300/80 to-cyan-300/80" : "from-rose-300/80 to-amber-200/80"}`} data-collision-check={`score-${tone}`}>
       <span>{label}</span>
       <strong>{score}</strong>
     </div>
@@ -169,6 +202,7 @@ function BookRibbon({ state }: { state: PublicGameState }) {
                   ? "bg-emerald-300 text-zinc-950"
                   : "bg-rose-300 text-zinc-950"
           ].join(" ")}
+          data-collision-check="book-token"
           title={bookLabels[book.bookCode]}
         >
           {bookLabels[book.bookCode].replace(" Low", " L").replace(" High", " H")}
@@ -223,21 +257,26 @@ function announcementText(effect: Extract<TableEffect, { kind: "announcement" }>
 function PlayerSeat({
   active,
   effect,
+  layout,
   me,
-  player,
-  totalSeats
+  player
 }: {
   active: boolean;
   effect: TableEffect | undefined;
+  layout: TableLayout;
   me: boolean;
   player: PublicPlayerState;
-  totalSeats: number;
 }) {
-  const position = seatPosition(player.seatIndex, totalSeats);
+  const position = layout.seats[player.seatIndex] ?? { x: 50, y: 50 };
   return (
     <motion.div
       className="player-seat"
-      style={{ left: `${position.x}%`, top: `${position.y}%` }}
+      data-collision-zone="seat"
+      style={{
+        left: `${position.x}%`,
+        top: `${position.y}%`,
+        width: `${layout.seatWidth}px`
+      }}
       initial={{ scale: 0.4, opacity: 0 }}
       animate={{ scale: 1, opacity: player.isConnected ? 1 : 0.45 }}
       transition={{ type: "spring", stiffness: 220, damping: 20 }}
@@ -262,6 +301,10 @@ function PlayerSeat({
           me ? "me" : "",
           player.teamIndex === 0 ? "team-north" : "team-south"
         ].join(" ")}
+        style={{
+          height: `${layout.avatarSize}px`,
+          width: `${layout.avatarSize}px`
+        }}
         {...(active
           ? {
               animate: { boxShadow: ["0 0 0 0 rgba(255,255,255,0.6)", "0 0 0 16px rgba(255,255,255,0)"] },
@@ -275,7 +318,7 @@ function PlayerSeat({
         <span className="block truncate">{me ? "You" : player.displayName}</span>
         <span className="text-white/55">{player.cardCount} cards</span>
       </div>
-      <div className="seat-card-backs">
+      <div className={`seat-card-backs ${layout.showSeatCards ? "" : "hidden"}`}>
         {Array.from({ length: Math.min(player.cardCount, 5) }, (_, index) => (
           <GameCard key={index} back size="tiny" />
         ))}
@@ -284,13 +327,13 @@ function PlayerSeat({
   );
 }
 
-function TransferLayer({ effects, state }: { effects: TableEffect[]; state: PublicGameState }) {
+function TransferLayer({ effects, layout, state }: { effects: TableEffect[]; layout: TableLayout; state: PublicGameState }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       <AnimatePresence>
         {effects.filter((effect): effect is Extract<TableEffect, { kind: "transfer" }> => effect.kind === "transfer").map((effect) => {
-          const from = seatForPlayer(state, effect.fromPlayerId);
-          const to = seatForPlayer(state, effect.toPlayerId);
+          const from = seatForPlayer(state, layout, effect.fromPlayerId);
+          const to = seatForPlayer(state, layout, effect.toPlayerId);
           const midX = (from.x + to.x) / 2;
           const midY = Math.min(from.y, to.y) - 14;
           return (
@@ -351,9 +394,9 @@ function EndGameOverlay({ scores, state }: { scores: Record<TeamIndex, number>; 
   );
 }
 
-function seatForPlayer(state: PublicGameState, playerId: string) {
+function seatForPlayer(state: PublicGameState, layout: TableLayout, playerId: string) {
   const player = state.players.find((candidate) => candidate.playerId === playerId);
-  return seatPosition(player?.seatIndex ?? 0, state.playerCount);
+  return layout.seats[player?.seatIndex ?? 0] ?? { x: 50, y: 50 };
 }
 
 function playerName(state: PublicGameState, playerId: string | undefined) {

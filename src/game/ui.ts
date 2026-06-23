@@ -1,4 +1,4 @@
-import { CARD_CATALOG } from "./cards";
+import { BOOK_CODES, CARD_CATALOG } from "./cards";
 import type { BookCode, CardCode, CardDefinition, MyHandState, PublicGameState, PublicPlayerState, TeamIndex } from "./types";
 import type { ClientGameEvent } from "./clientEvents";
 
@@ -6,6 +6,49 @@ export type SeatPosition = {
   x: number;
   y: number;
   angle: number;
+};
+
+export type LayoutRect = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type TableLayoutMetrics = {
+  width: number;
+  height: number;
+  playerCount: number;
+};
+
+export type TableLayout = {
+  compact: boolean;
+  seatWidth: number;
+  seatHeight: number;
+  avatarSize: number;
+  showSeatCards: boolean;
+  seats: SeatPosition[];
+  zones: {
+    hud: LayoutRect;
+    announcement: LayoutRect;
+    turn: LayoutRect;
+    seatArea: LayoutRect;
+  };
+};
+
+export type HandLayoutMode = "fit" | "scroll";
+
+export type HandLayout = {
+  mode: HandLayoutMode;
+  cardSize: "tiny" | "small" | "medium";
+  visibleGroups: number;
+  showNavigation: boolean;
+};
+
+export type Collision = {
+  a: string;
+  b: string;
 };
 
 export type RequestCardOption = {
@@ -53,14 +96,129 @@ export type TableEffect =
     };
 
 export function seatPosition(index: number, total: number): SeatPosition {
-  const safeTotal = Math.max(total, 1);
-  const angle = -90 + (360 / safeTotal) * index;
-  const radians = angle * Math.PI / 180;
-  return {
-    x: 50 + Math.cos(radians) * 32,
-    y: 50 + Math.sin(radians) * 28,
-    angle
+  return buildTableLayout({ width: 1000, height: 620, playerCount: total }).seats[index] ?? {
+    x: 50,
+    y: 50,
+    angle: 0
   };
+}
+
+export function buildTableLayout(metrics: TableLayoutMetrics): TableLayout {
+  const width = Math.max(metrics.width, 320);
+  const height = Math.max(metrics.height, 360);
+  const playerCount = Math.max(metrics.playerCount, 1);
+  const compact = width < 720 || height < 560;
+  const padX = compact ? 16 : 120;
+  const hudHeight = compact ? 78 : 94;
+  const bottomReserve = compact ? 84 : 118;
+  const seatWidth = compact ? 82 : 172;
+  const seatHeight = compact ? 86 : 178;
+  const avatarSize = compact ? 40 : 64;
+  const top = hudHeight + seatHeight / 2 + 8;
+  const bottom = height - bottomReserve - seatHeight / 2;
+  const left = padX + seatWidth / 2;
+  const right = width - padX - seatWidth / 2;
+  const centerX = width / 2;
+  const centerY = (top + bottom) / 2;
+  const radiusX = Math.max(24, (right - left) / 2);
+  const radiusY = Math.max(24, (bottom - top) / 2);
+
+  const seats = compact
+    ? compactSeatPositions({ width, height, playerCount, left, right, top, bottom })
+    : Array.from({ length: playerCount }, (_, index) => {
+        const angle = -90 + (360 / playerCount) * index;
+        const radians = angle * Math.PI / 180;
+        const x = clamp(centerX + Math.cos(radians) * radiusX, left, right);
+        const y = clamp(centerY + Math.sin(radians) * radiusY, top, bottom);
+        return {
+          x: (x / width) * 100,
+          y: (y / height) * 100,
+          angle
+        };
+      });
+
+  return {
+    compact,
+    seatWidth,
+    seatHeight,
+    avatarSize,
+    showSeatCards: !compact && height >= 620,
+    seats,
+    zones: {
+      hud: { id: "hud", x: 16, y: 16, width: width - 32, height: compact ? 56 : 68 },
+      announcement: {
+        id: "announcement",
+        x: Math.max(16, width * 0.16),
+        y: Math.max(hudHeight + 16, height * 0.28),
+        width: Math.min(width - 32, width * 0.68),
+        height: compact ? 76 : 92
+      },
+      turn: {
+        id: "turn",
+        x: Math.max(16, width * 0.31),
+        y: Math.max(hudHeight + 110, height * 0.51),
+        width: Math.min(width - 32, width * 0.38),
+        height: 48
+      },
+      seatArea: {
+        id: "seat-area",
+        x: left - seatWidth / 2,
+        y: top - seatHeight / 2,
+        width: right - left + seatWidth,
+        height: bottom - top + seatHeight
+      }
+    }
+  };
+}
+
+export function seatRects(layout: TableLayout): LayoutRect[] {
+  const tableWidth = 1000;
+  const tableHeight = 620;
+  return layout.seats.map((seat, index) => ({
+    id: `seat-${index}`,
+    x: seat.x / 100 * tableWidth - layout.seatWidth / 2,
+    y: seat.y / 100 * tableHeight - layout.seatHeight / 2,
+    width: layout.seatWidth,
+    height: layout.seatHeight
+  }));
+}
+
+export function hasCompactTable(metrics: Pick<TableLayoutMetrics, "width" | "height">) {
+  return metrics.width < 720 || metrics.height < 560;
+}
+
+export function buildHandLayout(input: { containerWidth: number; groupCount: number; cardCount: number }): HandLayout {
+  const width = Math.max(input.containerWidth, 320);
+  const groupCount = Math.max(input.groupCount, 1);
+  const cardCount = Math.max(input.cardCount, 0);
+  const estimatedFitWidth = groupCount * 244 + (groupCount - 1) * 12;
+  const cramped = width < estimatedFitWidth || width < 760;
+
+  return {
+    mode: cramped ? "scroll" : "fit",
+    cardSize: width < 560 ? "tiny" : width < 880 || cardCount > 18 ? "small" : "medium",
+    visibleGroups: Math.max(1, Math.floor(width / (width < 560 ? 220 : 256))),
+    showNavigation: cramped
+  };
+}
+
+export function deriveHandFilters(cards: readonly CardDefinition[]): Array<BookCode | "all"> {
+  const present = new Set(cards.map((card) => card.bookCode));
+  return ["all", ...BOOK_CODES.filter((bookCode) => present.has(bookCode))];
+}
+
+export function findCollisions(rects: readonly LayoutRect[], gap = 0): Collision[] {
+  const collisions: Collision[] = [];
+  for (let leftIndex = 0; leftIndex < rects.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < rects.length; rightIndex += 1) {
+      const left = rects[leftIndex]!;
+      const right = rects[rightIndex]!;
+      if (rectsOverlap(left, right, gap)) {
+        collisions.push({ a: left.id, b: right.id });
+      }
+    }
+  }
+  return collisions;
 }
 
 export function buildRequestCardOptions(input: {
@@ -104,6 +262,55 @@ export function buildRequestCardOptions(input: {
       reason
     };
   });
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function compactSeatPositions(input: {
+  width: number;
+  height: number;
+  playerCount: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}): SeatPosition[] {
+  const topCount = Math.ceil(input.playerCount / 2);
+  const bottomCount = input.playerCount - topCount;
+  const topY = input.top;
+  const bottomY = Math.max(input.bottom, topY + 88);
+  const topXs = distributedSlots(input.left, input.right, topCount);
+  const bottomXs = distributedSlots(input.left, input.right, bottomCount);
+
+  return Array.from({ length: input.playerCount }, (_, index) => {
+    const topRow = index < topCount;
+    const rowIndex = topRow ? index : index - topCount;
+    const rowCount = topRow ? topCount : bottomCount;
+    const x = topRow ? topXs[rowIndex] ?? input.width / 2 : bottomXs[rowIndex] ?? input.width / 2;
+    const y = topRow ? topY : bottomY;
+    return {
+      x: x / input.width * 100,
+      y: y / input.height * 100,
+      angle: topRow ? -110 + (rowCount > 1 ? (220 / (rowCount - 1)) * rowIndex : 110) : 110 - (rowCount > 1 ? (220 / (rowCount - 1)) * rowIndex : 110)
+    };
+  });
+}
+
+function distributedSlots(left: number, right: number, count: number) {
+  if (count <= 0) return [];
+  if (count === 1) return [(left + right) / 2];
+  return Array.from({ length: count }, (_, index) => left + ((right - left) / (count - 1)) * index);
+}
+
+function rectsOverlap(left: LayoutRect, right: LayoutRect, gap: number) {
+  return !(
+    left.x + left.width + gap <= right.x ||
+    right.x + right.width + gap <= left.x ||
+    left.y + left.height + gap <= right.y ||
+    right.y + right.height + gap <= left.y
+  );
 }
 
 export function effectFromEvent(event: ClientGameEvent): TableEffect[] {

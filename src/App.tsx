@@ -15,7 +15,7 @@ import {
   Users,
   X
 } from "lucide-react";
-import { BOOK_CODES, getCardsForBook } from "./game/cards";
+import { BOOK_CODES, CARD_CATALOG, getCardsForBook } from "./game/cards";
 import { adaptRealtimePayload } from "./game/clientEvents";
 import { bookLabels, formatCard, teamNames } from "./game/display";
 import { buildRequestCardOptions, effectFromEvent, type TableEffect } from "./game/ui";
@@ -460,6 +460,10 @@ function App() {
     enqueueEffects([effect]);
   }
 
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("demoTable")) {
+    return <DevTableDemo />;
+  }
+
   if (!hasSupabaseConfig) {
     return <Shell error="Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before running the client." />;
   }
@@ -893,6 +897,68 @@ function SeatMeter({ filled, total }: { filled: number; total: number }) {
         <span key={index} className={`h-2 w-7 rounded-full ${index < filled ? "bg-cyan-200" : "bg-white/15"}`} />
       ))}
     </div>
+  );
+}
+
+function DevTableDemo() {
+  const [selectedCard, setSelectedCard] = useState<CardCode | null>(null);
+  const players: PublicPlayerState[] = [
+    { playerId: "p1", displayName: "Thomas", seatIndex: 0, teamIndex: 0, cardCount: 11, isConnected: true },
+    { playerId: "p2", displayName: "Sarah", seatIndex: 1, teamIndex: 1, cardCount: 8, isConnected: true },
+    { playerId: "p3", displayName: "Jonathan", seatIndex: 2, teamIndex: 0, cardCount: 7, isConnected: true },
+    { playerId: "p4", displayName: "Priya", seatIndex: 3, teamIndex: 1, cardCount: 6, isConnected: true },
+    { playerId: "p5", displayName: "Michael", seatIndex: 4, teamIndex: 0, cardCount: 5, isConnected: true },
+    { playerId: "p6", displayName: "Alexandra", seatIndex: 5, teamIndex: 1, cardCount: 4, isConnected: true },
+    { playerId: "p7", displayName: "Ben", seatIndex: 6, teamIndex: 0, cardCount: 3, isConnected: true },
+    { playerId: "p8", displayName: "Nina", seatIndex: 7, teamIndex: 1, cardCount: 2, isConnected: true }
+  ];
+  const state: PublicGameState = {
+    gameId: "demo",
+    lobbyCode: "DEMO",
+    status: "active",
+    playerCount: 8,
+    currentTurnPlayerId: "p1",
+    version: 1,
+    players,
+    books: BOOK_CODES.map((bookCode, index) => ({
+      bookCode,
+      status: index < 2 ? "claimed" : "unclaimed",
+      awardedTeamIndex: index === 0 ? 0 : index === 1 ? 1 : null
+    }))
+  };
+  const hand: MyHandState = {
+    gameId: "demo",
+    playerId: "p1",
+    cards: CARD_CATALOG.slice(0, 22)
+  };
+
+  return (
+    <Shell>
+      <GameTable
+        busyAction={null}
+        effects={[
+          {
+            id: "demo-announcement",
+            kind: "announcement",
+            tone: "miss",
+            askerPlayerId: "p1",
+            targetPlayerId: "p2",
+            cardCode: "QH"
+          }
+        ]}
+        hand={hand}
+        isMyTurn
+        me={players[0] ?? null}
+        selectedCard={selectedCard}
+        soundMuted
+        state={state}
+        onAskOpen={() => undefined}
+        onClaimOpen={() => undefined}
+        onEmote={() => undefined}
+        onSelectCard={setSelectedCard}
+        onToggleSound={() => undefined}
+      />
+    </Shell>
   );
 }
 
