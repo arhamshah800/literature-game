@@ -69,16 +69,44 @@ select {
   }
 
   .hand-fan-shell {
-    @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 px-1 pb-2 pt-5;
+    @apply overflow-hidden rounded-2xl border border-white/10 bg-black/15 p-3;
   }
 
-  .hand-fan-scroll {
-    @apply overflow-x-auto overflow-y-hidden pb-5;
+  .hand-group-scroll {
+    @apply overflow-x-auto overflow-y-visible pb-3;
     scrollbar-width: thin;
   }
 
-  .hand-fan-stage {
-    @apply relative mx-auto h-64 min-w-full;
+  .hand-group-grid {
+    @apply grid min-w-full auto-cols-max grid-flow-col gap-3;
+  }
+
+  .hand-group {
+    @apply grid min-h-64 w-[min(74vw,24rem)] content-start rounded-xl border border-white/10 bg-white/10 p-3 sm:w-80;
+  }
+
+  .hand-group-label {
+    @apply mb-3 flex items-center justify-between gap-2 rounded-full bg-black/20 px-3 py-2 text-xs font-black text-white;
+  }
+
+  .hand-group-label span {
+    @apply min-w-0 truncate;
+  }
+
+  .hand-group-label strong {
+    @apply shrink-0 text-white/60;
+  }
+
+  .hand-group-cards {
+    @apply flex min-h-40 items-end overflow-visible pl-1 pt-8;
+  }
+
+  .hand-card-slot {
+    @apply shrink-0;
+  }
+
+  .hand-card-slot + .hand-card-slot {
+    margin-left: -2.55rem;
   }
 
   .game-card {
@@ -99,6 +127,7 @@ select {
   }
 
   .player-seat {
+    width: clamp(7.5rem, 13vw, 11.5rem);
     @apply absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center;
   }
 
@@ -123,7 +152,7 @@ select {
   }
 
   .speech-bubble {
-    @apply absolute bottom-[calc(100%+0.55rem)] left-1/2 min-w-28 -translate-x-1/2 rounded-xl px-3 py-2 text-center text-xs font-black text-zinc-950 shadow-card;
+    @apply absolute bottom-[calc(100%+0.55rem)] left-1/2 min-w-28 max-w-44 -translate-x-1/2 rounded-xl px-3 py-2 text-center text-xs font-black text-zinc-950 shadow-card;
   }
 
   .speech-bubble.ask {
@@ -143,11 +172,11 @@ select {
   }
 
   .book-ribbon {
-    @apply absolute bottom-4 left-1/2 z-10 flex w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-white/10 bg-black/20 p-2 backdrop-blur;
+    @apply relative z-10 flex w-full gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-zinc-950/45 p-2 shadow-soft backdrop-blur-xl;
   }
 
   .book-token {
-    @apply shrink-0 rounded-full px-3 py-1 text-[11px] font-black;
+    @apply shrink-0 rounded-full px-3 py-2 text-[11px] font-black;
   }
 
   .score-badge {
@@ -170,9 +199,46 @@ select {
     @apply h-12 rounded-xl;
   }
 
+  .turn-indicator {
+    @apply pointer-events-none absolute left-1/2 top-[52%] z-30 w-[min(72vw,34rem)] -translate-x-1/2 -translate-y-1/2 text-center;
+  }
+
+  .announcement-lane {
+    @apply pointer-events-none absolute left-1/2 top-[35%] z-40 grid w-[min(86vw,46rem)] -translate-x-1/2 -translate-y-1/2 place-items-center text-center;
+  }
+
+  .center-announcement {
+    @apply rounded-2xl border px-5 py-4 text-base font-black shadow-card backdrop-blur sm:text-xl;
+  }
+
+  .center-announcement.ask {
+    @apply border-cyan-100/60 bg-cyan-100/95 text-zinc-950;
+  }
+
+  .center-announcement.hit {
+    @apply border-emerald-100/70 bg-emerald-100/95 text-zinc-950;
+  }
+
+  .center-announcement.miss {
+    @apply border-rose-100/70 bg-rose-100/95 text-zinc-950;
+  }
+
+  .center-announcement.turn,
+  .center-announcement.claim {
+    @apply border-amber-100/70 bg-amber-100/95 text-zinc-950;
+  }
+
+  .seat-nameplate {
+    @apply mt-2 w-full rounded-full border border-white/15 bg-black/35 px-3 py-1 text-center text-xs font-black text-white backdrop-blur;
+  }
+
+  .seat-card-backs {
+    @apply mt-2 flex max-w-full justify-center -space-x-2 overflow-hidden px-1;
+  }
+
   @media (max-width: 640px) {
     .table-top {
-      min-height: 580px;
+      min-height: 540px;
       border-radius: 1.25rem;
     }
 
@@ -184,8 +250,36 @@ select {
       display: none;
     }
 
-    .hand-fan-stage {
-      height: 15rem;
+    .player-seat {
+      width: 7.25rem;
+    }
+
+    .speech-bubble {
+      @apply min-w-24 max-w-32 px-2 py-1 text-[10px];
+    }
+
+    .turn-indicator {
+      @apply top-[54%] w-[min(82vw,24rem)];
+    }
+
+    .announcement-lane {
+      @apply top-[34%] w-[min(90vw,24rem)];
+    }
+
+    .center-announcement {
+      @apply px-3 py-3 text-sm;
+    }
+
+    .hand-group {
+      min-height: 14.5rem;
+    }
+
+    .hand-group-cards {
+      @apply min-h-36;
+    }
+
+    .hand-card-slot + .hand-card-slot {
+      margin-left: -3rem;
     }
   }
 }

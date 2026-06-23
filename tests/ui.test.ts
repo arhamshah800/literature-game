@@ -47,10 +47,10 @@ describe("table seating", () => {
     for (let total = 4; total <= 8; total += 1) {
       for (let index = 0; index < total; index += 1) {
         const position = seatPosition(index, total);
-        expect(position.x).toBeGreaterThanOrEqual(0);
-        expect(position.x).toBeLessThanOrEqual(100);
-        expect(position.y).toBeGreaterThanOrEqual(0);
-        expect(position.y).toBeLessThanOrEqual(100);
+        expect(position.x).toBeGreaterThanOrEqual(18);
+        expect(position.x).toBeLessThanOrEqual(82);
+        expect(position.y).toBeGreaterThanOrEqual(22);
+        expect(position.y).toBeLessThanOrEqual(78);
       }
     }
   });
@@ -67,7 +67,7 @@ describe("request card options", () => {
     });
     expect(options.find((option) => option.card.code === "9C")).toMatchObject({
       legal: false,
-      reason: "You need another card from this book."
+      reason: "You must hold at least one card from this set."
     });
   });
 });
@@ -91,8 +91,11 @@ describe("event effects", () => {
     });
 
     expect(event?.type).toBe("card.transferred");
-    expect(effectFromEvent(event!)).toMatchObject([
-      { kind: "transfer", fromPlayerId: "p2", toPlayerId: "p1", cardCode: "3C" }
-    ]);
+    expect(effectFromEvent(event!)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "transfer", fromPlayerId: "p2", toPlayerId: "p1", cardCode: "3C" }),
+        expect.objectContaining({ kind: "announcement", tone: "hit", targetPlayerId: "p2", askerPlayerId: "p1" })
+      ])
+    );
   });
 });

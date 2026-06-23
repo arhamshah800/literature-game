@@ -32,6 +32,16 @@ export type TableEffect =
     }
   | {
       id: string;
+      kind: "announcement";
+      tone: "ask" | "hit" | "miss" | "turn" | "claim";
+      askerPlayerId?: string;
+      targetPlayerId?: string;
+      cardCode?: CardCode;
+      playerId?: string;
+      text?: string;
+    }
+  | {
+      id: string;
       kind: "turn";
       playerId: string;
     }
@@ -47,8 +57,8 @@ export function seatPosition(index: number, total: number): SeatPosition {
   const angle = -90 + (360 / safeTotal) * index;
   const radians = angle * Math.PI / 180;
   return {
-    x: 50 + Math.cos(radians) * 39,
-    y: 50 + Math.sin(radians) * 34,
+    x: 50 + Math.cos(radians) * 32,
+    y: 50 + Math.sin(radians) * 28,
     angle
   };
 }
@@ -85,7 +95,7 @@ export function buildRequestCardOptions(input: {
     } else if (heldCodes.has(card.code)) {
       reason = "You already hold this card.";
     } else if (!heldLiveBooks.has(card.bookCode)) {
-      reason = "You need another card from this book.";
+      reason = "You must hold at least one card from this set.";
     }
 
     return {
@@ -107,22 +117,42 @@ export function effectFromEvent(event: ClientGameEvent): TableEffect[] {
         tone: "join"
       }];
     case "card.asked":
-      return [{
-        id: `${event.id}:ask`,
-        kind: "speech",
-        playerId: event.payload.askerPlayerId,
-        text: `Asked for ${event.payload.cardCode}`,
-        tone: "ask"
-      }];
+      return [
+        {
+          id: `${event.id}:ask`,
+          kind: "speech",
+          playerId: event.payload.askerPlayerId,
+          text: `Asked for ${event.payload.cardCode}`,
+          tone: "ask"
+        },
+        {
+          id: `${event.id}:ask-announcement`,
+          kind: "announcement",
+          tone: "ask",
+          askerPlayerId: event.payload.askerPlayerId,
+          targetPlayerId: event.payload.targetPlayerId,
+          cardCode: event.payload.cardCode
+        }
+      ];
     case "card.transferred":
-      return [{
-        id: `${event.id}:transfer`,
-        kind: "transfer",
-        fromPlayerId: event.payload.fromPlayerId,
-        toPlayerId: event.payload.toPlayerId,
-        cardCode: event.payload.cardCode,
-        bookCode: event.payload.bookCode
-      }];
+      return [
+        {
+          id: `${event.id}:transfer`,
+          kind: "transfer",
+          fromPlayerId: event.payload.fromPlayerId,
+          toPlayerId: event.payload.toPlayerId,
+          cardCode: event.payload.cardCode,
+          bookCode: event.payload.bookCode
+        },
+        {
+          id: `${event.id}:hit-announcement`,
+          kind: "announcement",
+          tone: "hit",
+          askerPlayerId: event.payload.toPlayerId,
+          targetPlayerId: event.payload.fromPlayerId,
+          cardCode: event.payload.cardCode
+        }
+      ];
     case "ask.missed":
       return [
         {
@@ -131,6 +161,14 @@ export function effectFromEvent(event: ClientGameEvent): TableEffect[] {
           playerId: event.payload.targetPlayerId,
           text: "No card",
           tone: "miss"
+        },
+        {
+          id: `${event.id}:miss-announcement`,
+          kind: "announcement",
+          tone: "miss",
+          askerPlayerId: event.payload.askerPlayerId,
+          targetPlayerId: event.payload.targetPlayerId,
+          cardCode: event.payload.cardCode
         },
         {
           id: `${event.id}:turn`,

@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { GameCard } from "./GameCard";
-import type { CardCode, CardDefinition } from "../game/types";
+import { BOOK_CODES } from "../game/cards";
+import { bookLabels } from "../game/display";
+import type { BookCode, CardCode, CardDefinition } from "../game/types";
 
 type HandFanProps = {
   cards: CardDefinition[];
@@ -17,34 +19,46 @@ export function HandFan({ cards, onSelect, selectedCard }: HandFanProps) {
     );
   }
 
-  const center = (cards.length - 1) / 2;
+  const groups = groupCards(cards);
 
   return (
     <div className="hand-fan-shell">
-      <div className="hand-fan-scroll">
-        <div className="hand-fan-stage" style={{ width: `${Math.max(340, cards.length * 68 + 150)}px` }}>
-          <AnimatePresence initial={false}>
-            {cards.map((card, index) => {
-              const offset = index - center;
-              const rotate = offset * 5.4;
-              const x = index * 58 + 40;
-              const y = Math.abs(offset) * 4;
-              return (
-                <motion.div
-                  key={card.code}
-                  className="absolute bottom-0"
-                  initial={{ opacity: 0, y: 60, rotate: 0 }}
-                  animate={{ opacity: 1, x, y, rotate, zIndex: selectedCard === card.code ? 60 : index }}
-                  exit={{ opacity: 0, y: 80, scale: 0.7 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 26 }}
-                >
-                  <GameCard card={card} selected={selectedCard === card.code} onClick={() => onSelect(card.code)} />
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+      <div className="hand-group-scroll">
+        <div className="hand-group-grid">
+          {groups.map(([bookCode, bookCards]) => (
+            <motion.section key={bookCode} className="hand-group" layout>
+              <div className="hand-group-label">
+                <span>{bookLabels[bookCode]}</span>
+                <strong>{bookCards.length}/6</strong>
+              </div>
+              <div className="hand-group-cards">
+                <AnimatePresence initial={false}>
+                  {bookCards.map((card) => (
+                    <motion.div
+                      key={card.code}
+                      layout
+                      className="hand-card-slot"
+                      initial={{ opacity: 0, y: 22, scale: 0.84 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 24, scale: 0.72 }}
+                      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+                    >
+                      <GameCard card={card} selected={selectedCard === card.code} onClick={() => onSelect(card.code)} size="small" />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </motion.section>
+          ))}
         </div>
       </div>
     </div>
   );
+}
+
+function groupCards(cards: CardDefinition[]): [BookCode, CardDefinition[]][] {
+  return BOOK_CODES.map((bookCode) => [
+    bookCode,
+    cards.filter((card) => card.bookCode === bookCode).sort((left, right) => left.sortIndex - right.sortIndex)
+  ] as [BookCode, CardDefinition[]]).filter(([, bookCards]) => bookCards.length > 0);
 }

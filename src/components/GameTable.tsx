@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import confetti from "canvas-confetti";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Hand, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { bookLabels, initials, teamNames } from "../game/display";
+import { bookLabels, formatCardName, initials, teamNames } from "../game/display";
 import { seatPosition, type TableEffect } from "../game/ui";
 import type { CardCode, MyHandState, PublicGameState, PublicPlayerState, TeamIndex } from "../game/types";
 import { GameCard } from "./GameCard";
@@ -41,6 +41,7 @@ export function GameTable({
 }: GameTableProps) {
   const scores = scoreBooks(state);
   const celebrationKey = effects.find((effect) => effect.kind === "celebration")?.id;
+  const announcements = effects.filter((effect): effect is Extract<TableEffect, { kind: "announcement" }> => effect.kind === "announcement");
 
   useEffect(() => {
     if (!celebrationKey) return;
@@ -56,7 +57,6 @@ export function GameTable({
     <div className="game-scene">
       <div className="table-top">
         <TableHud state={state} scores={scores} soundMuted={soundMuted} onToggleSound={onToggleSound} />
-        <BookRibbon state={state} />
         <div className="absolute inset-0">
           {state.players.map((player) => (
             <PlayerSeat
@@ -70,10 +70,11 @@ export function GameTable({
           ))}
         </div>
         <TransferLayer effects={effects} state={state} />
-        <div className="absolute left-1/2 top-1/2 w-[min(58vw,520px)] -translate-x-1/2 -translate-y-1/2 text-center">
+        <CenterAnnouncements announcements={announcements} state={state} />
+        <div className="turn-indicator">
           <motion.div
             key={state.currentTurnPlayerId ?? "waiting"}
-            className="mx-auto w-fit rounded-full border border-white/20 bg-black/20 px-5 py-2 text-sm font-black text-white shadow-soft backdrop-blur"
+            className="mx-auto w-fit rounded-full border border-white/30 bg-zinc-950/60 px-5 py-2 text-sm font-black text-white shadow-soft backdrop-blur"
             initial={{ scale: 0.88, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 18 }}
@@ -82,6 +83,7 @@ export function GameTable({
           </motion.div>
         </div>
       </div>
+      <BookRibbon state={state} />
 
       <section className="hand-dock">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -176,6 +178,48 @@ function BookRibbon({ state }: { state: PublicGameState }) {
   );
 }
 
+function CenterAnnouncements({
+  announcements,
+  state
+}: {
+  announcements: Extract<TableEffect, { kind: "announcement" }>[];
+  state: PublicGameState;
+}) {
+  const announcement = announcements.at(-1);
+
+  return (
+    <div className="announcement-lane">
+      <AnimatePresence mode="popLayout">
+        {announcement ? (
+          <motion.div
+            key={announcement.id}
+            className={`center-announcement ${announcement.tone}`}
+            initial={{ opacity: 0, y: 18, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -18, scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          >
+            {announcementText(announcement, state)}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function announcementText(effect: Extract<TableEffect, { kind: "announcement" }>, state: PublicGameState) {
+  if (effect.text) return effect.text;
+  const asker = playerName(state, effect.askerPlayerId);
+  const target = playerName(state, effect.targetPlayerId);
+  const card = effect.cardCode ? formatCardName(effect.cardCode) : "a card";
+
+  if (effect.tone === "ask") return `${asker} asked ${target} for ${card}.`;
+  if (effect.tone === "hit") return `${target} had ${card}. Card transferred.`;
+  if (effect.tone === "miss") return `${target} did not have ${card}. Go Fish.`;
+  if (effect.tone === "turn") return `${playerName(state, effect.playerId)} has the turn.`;
+  return effect.text ?? "Claim resolved.";
+}
+
 function PlayerSeat({
   active,
   effect,
@@ -227,11 +271,11 @@ function PlayerSeat({
       >
         {initials(player.displayName)}
       </motion.div>
-      <div className="mt-2 min-w-28 rounded-full border border-white/15 bg-black/25 px-3 py-1 text-center text-xs font-black text-white backdrop-blur">
+      <div className="seat-nameplate">
         <span className="block truncate">{me ? "You" : player.displayName}</span>
         <span className="text-white/55">{player.cardCount} cards</span>
       </div>
-      <div className="mt-2 flex justify-center -space-x-2">
+      <div className="seat-card-backs">
         {Array.from({ length: Math.min(player.cardCount, 5) }, (_, index) => (
           <GameCard key={index} back size="tiny" />
         ))}
@@ -310,6 +354,10 @@ function EndGameOverlay({ scores, state }: { scores: Record<TeamIndex, number>; 
 function seatForPlayer(state: PublicGameState, playerId: string) {
   const player = state.players.find((candidate) => candidate.playerId === playerId);
   return seatPosition(player?.seatIndex ?? 0, state.playerCount);
+}
+
+function playerName(state: PublicGameState, playerId: string | undefined) {
+  return state.players.find((player) => player.playerId === playerId)?.displayName ?? "Someone";
 }
 
 function scoreBooks(state: PublicGameState): Record<TeamIndex, number> {
