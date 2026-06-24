@@ -110,12 +110,10 @@ describe("deal policy", () => {
     expect(Object.values(counts)).toEqual([7, 7, 7, 7, 7, 7, 6, 6]);
   });
 
-  it("deals 54 cards round-robin to odd player counts", () => {
-    const dealt = dealCards(["p1", "p2", "p3", "p4", "p5", "p6", "p7"], 7, deterministicRandom);
-    const counts = countByPlayer(dealt.map((card) => card.playerId));
-
-    expect(dealt).toHaveLength(54);
-    expect(Object.values(counts)).toEqual([8, 8, 8, 8, 8, 7, 7]);
+  it("rejects odd player counts at compile-time and runtime boundaries", () => {
+    expect(() => dealCards(["p1", "p2", "p3", "p4", "p5"], 4, deterministicRandom)).toThrow(
+      "Expected 4 players"
+    );
   });
 });
 
@@ -134,12 +132,10 @@ describe("team randomization", () => {
     expect(counts["team-1"]).toBe(3);
   });
 
-  it("allows one team to have one extra player for odd player counts", () => {
-    const assignments = randomizeTeams(["p1", "p2", "p3", "p4", "p5"], deterministicRandom);
-    const counts = countByPlayer(assignments.map((assignment) => `team-${assignment.teamIndex}`));
-
-    expect(assignments).toHaveLength(5);
-    expect(Math.abs((counts["team-0"] ?? 0) - (counts["team-1"] ?? 0))).toBe(1);
+  it("rejects odd player counts", () => {
+    expect(() => randomizeTeams(["p1", "p2", "p3", "p4", "p5"], deterministicRandom)).toThrow(
+      "odd number of players"
+    );
   });
 
   it("rejects duplicate player IDs", () => {

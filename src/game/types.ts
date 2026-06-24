@@ -1,4 +1,4 @@
-export type PlayerCount = 4 | 5 | 6 | 7 | 8;
+export type PlayerCount = 4 | 6 | 8;
 
 export type Suit = "clubs" | "diamonds" | "hearts" | "spades";
 
@@ -39,7 +39,7 @@ export type TeamIndex = 0 | 1;
 
 export type GameStatus = "waiting" | "active" | "completed" | "cancelled";
 
-export type CardLocationType = "deck" | "player" | "claimed" | "cancelled";
+export type CardLocationType = "deck" | "player" | "pending_transfer" | "claimed" | "cancelled";
 
 export type ClaimResult =
   | "correct"
@@ -113,6 +113,17 @@ export type PublicBookState = {
   awardedTeamIndex: TeamIndex | null;
 };
 
+export type PendingTransferAction = "thank" | "pickup_without_thanks";
+
+export type PendingTransferState = {
+  transferId: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  cardCode: CardCode;
+  bookCode: BookCode;
+  status: "pending";
+};
+
 export type PublicGameState = {
   gameId: string;
   lobbyCode: string;
@@ -123,6 +134,7 @@ export type PublicGameState = {
   version: number;
   players: PublicPlayerState[];
   books: PublicBookState[];
+  pendingTransfer: PendingTransferState | null;
 };
 
 export type MyHandState = {

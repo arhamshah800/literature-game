@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Hand, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { Check, Hand, Sparkles, ThumbsUp, Volume2, VolumeX } from "lucide-react";
 import { bookLabels, formatCardName, getTeamName, initials } from "../game/display";
 import { buildTableLayout, buildTeamRailSeatPositions, missAnnouncementText, type TableEffect, type TableLayout } from "../game/ui";
 import type { CardCode, MyHandState, PublicGameState, PublicPlayerState, TeamIndex } from "../game/types";
@@ -20,6 +20,7 @@ type GameTableProps = {
   onAskOpen: (open: boolean) => void;
   onClaimOpen: (open: boolean) => void;
   onEmote: (text: string) => void;
+  onPendingTransfer: (action: "thank" | "pickup_without_thanks") => Promise<void> | void;
   onSelectCard: (cardCode: CardCode) => void;
   onTeamNames: (teamNames: Record<TeamIndex, string>) => Promise<void> | void;
   onToggleSound: () => void;
@@ -38,6 +39,7 @@ export function GameTable({
   onAskOpen,
   onClaimOpen,
   onEmote,
+  onPendingTransfer,
   onSelectCard,
   onTeamNames,
   onToggleSound,
@@ -119,6 +121,12 @@ export function GameTable({
           </div>
         )}
         <TransferLayer effects={effects} layout={layout} state={state} />
+        <PendingTransferCard
+          busy={busyAction === "pendingTransfer"}
+          isRecipient={state.pendingTransfer?.toPlayerId === me?.playerId}
+          onResolve={onPendingTransfer}
+          pendingTransfer={state.pendingTransfer}
+        />
         {!layout.compact ? <CenterAnnouncements announcements={announcements} state={state} /> : null}
         <div className="turn-indicator">
           <motion.div
@@ -160,11 +168,11 @@ export function GameTable({
         ) : null}
         <HandFan cards={hand?.cards ?? []} selectedCard={selectedCard} onSelect={onSelectCard} />
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <button className="primary-button table-action" onClick={() => onAskOpen(true)} disabled={!isMyTurn || busyAction === "ask"} data-collision-check="ask-action">
+          <button className="primary-button table-action" onClick={() => onAskOpen(true)} disabled={!isMyTurn || Boolean(state.pendingTransfer) || busyAction === "ask"} data-collision-check="ask-action">
             <Hand className="h-4 w-4" />
             Request Card
           </button>
-          <button className="secondary-button table-action" onClick={() => onClaimOpen(true)} disabled={!isMyTurn || busyAction === "claim"} data-collision-check="claim-action">
+          <button className="secondary-button table-action" onClick={() => onClaimOpen(true)} disabled={!isMyTurn || Boolean(state.pendingTransfer) || busyAction === "claim"} data-collision-check="claim-action">
             <Check className="h-4 w-4" />
             Claim Book
           </button>
@@ -481,6 +489,55 @@ function TransferLayer({ effects, layout, state }: { effects: TableEffect[]; lay
         })}
       </AnimatePresence>
     </div>
+  );
+}
+
+function PendingTransferCard({
+  busy,
+  isRecipient,
+  onResolve,
+  pendingTransfer
+}: {
+  busy: boolean;
+  isRecipient: boolean;
+  onResolve: (action: "thank" | "pickup_without_thanks") => Promise<void> | void;
+  pendingTransfer: PublicGameState["pendingTransfer"];
+}) {
+  if (!pendingTransfer) return null;
+
+  return (
+    <motion.div
+      className="pending-transfer"
+      data-collision-check="pending-transfer"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+    >
+      {isRecipient ? (
+        <button
+          className="thank-bubble"
+          disabled={busy}
+          onClick={(event) => {
+            event.stopPropagation();
+            void onResolve("thank");
+          }}
+        >
+          <ThumbsUp className="h-4 w-4" />
+          Thank you
+        </button>
+      ) : null}
+      <button
+        className={`pending-card-button ${isRecipient ? "can-pick-up" : ""}`}
+        disabled={!isRecipient || busy}
+        onClick={() => {
+          if (isRecipient) void onResolve("pickup_without_thanks");
+        }}
+        title={isRecipient ? "Say thank you before picking up this card" : "Waiting for thank you"}
+      >
+        <GameCard cardCode={pendingTransfer.cardCode} size="small" glow />
+      </button>
+    </motion.div>
   );
 }
 

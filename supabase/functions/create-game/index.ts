@@ -26,10 +26,9 @@ Deno.serve(async (request) => {
 
     if (
       !Number.isInteger(requestBody.playerCount) ||
-      requestBody.playerCount < 4 ||
-      requestBody.playerCount > 8
+      ![4, 6, 8].includes(requestBody.playerCount)
     ) {
-      throw new Error("playerCount must be between 4 and 8.");
+      throw new Error("playerCount must be 4, 6, or 8.");
     }
 
     const displayName = validateDisplayName(requestBody.displayName);

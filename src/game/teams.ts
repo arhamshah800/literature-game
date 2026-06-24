@@ -18,13 +18,12 @@ export function randomizeTeams(
     throw new Error("Cannot randomize teams with duplicate player IDs.");
   }
 
+  if (playerIds.length % 2 !== 0) {
+    throw new Error("Cannot randomize teams with an odd number of players.");
+  }
+
   const shuffled = shuffle(playerIds, randomInt);
-  const extraPlayerTeam: TeamIndex =
-    shuffled.length % 2 === 1 ? (randomInt(2) as TeamIndex) : 0;
-  const teamZeroSize =
-    shuffled.length % 2 === 0
-      ? shuffled.length / 2
-      : Math.floor(shuffled.length / 2) + (extraPlayerTeam === 0 ? 1 : 0);
+  const teamZeroSize = shuffled.length / 2;
 
   return shuffled.map((playerId, index) => ({
     playerId,

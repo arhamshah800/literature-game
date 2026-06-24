@@ -28,6 +28,7 @@ import type {
   ClaimAssignment,
   MyHandState,
   PlayerCount,
+  PendingTransferAction,
   PublicGameState,
   PublicPlayerState,
   TeamIndex
@@ -49,6 +50,7 @@ type BusyAction =
   | "randomize"
   | "renameTeams"
   | "ask"
+  | "pendingTransfer"
   | "claim"
   | null;
 
@@ -56,7 +58,7 @@ const storedGameIdKey = "literature.gameId";
 const storedPlayerIdKey = "literature.playerId";
 const storedNameKey = "literature.displayName";
 const soundMutedKey = "literature.soundMuted";
-const playerCountOptions = [4, 5, 6, 7, 8] as const;
+const playerCountOptions = [4, 6, 8] as const;
 const notSeatedError = "You are not seated in this game.";
 
 type EdgeFunctionErrorContext = {
@@ -72,7 +74,7 @@ function hashRequestKey(value: string) {
   return (hash >>> 0).toString(36);
 }
 
-function pendingRequestKey(action: "ask" | "claim", gameId: string, fingerprint: string) {
+function pendingRequestKey(action: "ask" | "claim" | "pendingTransfer", gameId: string, fingerprint: string) {
   return `literature.pending.${action}.${gameId}.${hashRequestKey(fingerprint)}`;
 }
 
@@ -264,6 +266,8 @@ function App() {
               const visualEffects = effectFromEvent(clientEvent);
               enqueueEffects(visualEffects);
               if (clientEvent.type === "card.transferred") playCue("slide");
+              if (clientEvent.type === "card.thank_required") playCue("slide");
+              if (clientEvent.type === "card.thank_penalty") playCue("miss");
               if (clientEvent.type === "turn.changed") playCue("turn");
               if (clientEvent.type === "ask.missed") playCue("miss");
               if (clientEvent.type === "claim.resolved") playCue("claim");
@@ -470,6 +474,28 @@ function App() {
     });
   }
 
+  async function resolvePendingTransfer(action: PendingTransferAction) {
+    const pendingTransfer = state?.pendingTransfer;
+    if (!state || !pendingTransfer) return;
+    armAudio();
+    await run("pendingTransfer", async () => {
+      const storageKey = pendingRequestKey("pendingTransfer", state.gameId, `${pendingTransfer.transferId}:${action}`);
+      const requestId = getOrCreateRequestId(storageKey);
+      const result = await invokeGameFunction<{ state: PublicGameState; myHand: MyHandState }>("resolve-pending-transfer", {
+        gameId: state.gameId,
+        transferId: pendingTransfer.transferId,
+        action,
+        requestId
+      });
+      localStorage.removeItem(storageKey);
+      setState(result.state);
+      setHand({
+        ...result.myHand,
+        cards: [...result.myHand.cards].sort((left, right) => left.sortIndex - right.sortIndex)
+      });
+    });
+  }
+
   function leaveLocalGame() {
     setGameId("");
     setPlayerId("");
@@ -575,6 +601,7 @@ function App() {
             onAskOpen={setAskOpen}
             onClaimOpen={setClaimOpen}
             onEmote={addLocalBubble}
+            onPendingTransfer={resolvePendingTransfer}
             onSelectCard={setSelectedCard}
             onTeamNames={(teamNamesValue) => void updateTeamNames(teamNamesValue)}
             onToggleSound={() => {
@@ -696,7 +723,7 @@ function LobbyView(props: {
               <h3 className="text-sm font-black">Create a room</h3>
               <span className="text-xs font-bold text-white/65">{props.playerCount} players</span>
             </div>
-            <div className="mb-3 grid grid-cols-5 gap-2">
+            <div className="mb-3 grid grid-cols-3 gap-2">
               {playerCountOptions.map((count) => (
                 <button
                   key={count}
@@ -1005,7 +1032,8 @@ function DevTableDemo() {
       bookCode,
       status: index < 2 ? "claimed" : "unclaimed",
       awardedTeamIndex: index === 0 ? 0 : index === 1 ? 1 : null
-    }))
+    })),
+    pendingTransfer: null
   };
   const hand: MyHandState = {
     gameId: "demo",
@@ -1037,6 +1065,7 @@ function DevTableDemo() {
         onAskOpen={() => undefined}
         onClaimOpen={() => undefined}
         onEmote={() => undefined}
+        onPendingTransfer={() => undefined}
         onSelectCard={setSelectedCard}
         onTeamNames={() => undefined}
         onToggleSound={() => undefined}

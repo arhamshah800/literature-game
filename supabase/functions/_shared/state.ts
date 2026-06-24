@@ -61,6 +61,21 @@ export async function getPublicState(sql: SqlClient, gameId: string): Promise<un
         left join public.book_results br
           on br.game_id = g.id
           and br.book_code = book.book_code
+      ),
+      'pendingTransfer', (
+        select jsonb_build_object(
+          'transferId', pct.id,
+          'fromPlayerId', pct.from_player_id,
+          'toPlayerId', pct.to_player_id,
+          'cardCode', pct.card_code,
+          'bookCode', pct.book_code,
+          'status', pct.status
+        )
+        from public.pending_card_transfers pct
+        where pct.game_id = g.id
+          and pct.status = 'pending'
+        order by pct.created_at desc
+        limit 1
       )
     ) as state
     from public.games g

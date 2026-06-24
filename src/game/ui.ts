@@ -280,6 +280,8 @@ export function buildRequestCardOptions(input: {
       reason = "Join the table first.";
     } else if (input.state.currentTurnPlayerId !== input.me.playerId) {
       reason = "Wait for your turn.";
+    } else if (input.state.pendingTransfer) {
+      reason = "Say thank you before taking another action.";
     } else if (!target) {
       reason = "Choose an opponent first.";
     } else if (target.teamIndex === input.me.teamIndex) {
@@ -379,6 +381,18 @@ export function effectFromEvent(event: ClientGameEvent): TableEffect[] {
           cardCode: event.payload.cardCode
         }
       ];
+    case "card.thank_required":
+      return [
+        {
+          id: `${event.id}:thank-required`,
+          kind: "announcement",
+          tone: "hit",
+          askerPlayerId: event.payload.toPlayerId,
+          targetPlayerId: event.payload.fromPlayerId,
+          cardCode: event.payload.cardCode,
+          text: "Say thank you before picking up the card."
+        }
+      ];
     case "card.transferred":
       return [
         {
@@ -396,6 +410,23 @@ export function effectFromEvent(event: ClientGameEvent): TableEffect[] {
           askerPlayerId: event.payload.toPlayerId,
           targetPlayerId: event.payload.fromPlayerId,
           cardCode: event.payload.cardCode
+        }
+      ];
+    case "card.thank_penalty":
+      return [
+        {
+          id: `${event.id}:thank-penalty`,
+          kind: "announcement",
+          tone: "miss",
+          askerPlayerId: event.payload.toPlayerId,
+          targetPlayerId: event.payload.fromPlayerId,
+          cardCode: event.payload.cardCode,
+          text: "No thank you. The card went back."
+        },
+        {
+          id: `${event.id}:turn`,
+          kind: "turn",
+          playerId: event.payload.nextTurnPlayerId
         }
       ];
     case "ask.missed":

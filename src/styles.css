@@ -329,6 +329,22 @@ select {
     @apply pointer-events-none absolute left-1/2 top-[52%] z-30 w-[min(72vw,34rem)] -translate-x-1/2 -translate-y-1/2 text-center;
   }
 
+  .pending-transfer {
+    @apply absolute left-1/2 top-[50%] z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2;
+  }
+
+  .thank-bubble {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-full border border-emerald-100/80 bg-emerald-100 px-4 text-sm font-black text-zinc-950 shadow-card transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-55;
+  }
+
+  .pending-card-button {
+    @apply rounded-lg border-0 bg-transparent p-0 transition disabled:cursor-default;
+  }
+
+  .pending-card-button.can-pick-up {
+    @apply cursor-pointer hover:scale-105;
+  }
+
   .announcement-lane {
     @apply pointer-events-none absolute left-1/2 top-[35%] z-40 grid w-[min(86vw,46rem)] -translate-x-1/2 -translate-y-1/2 place-items-center text-center;
   }

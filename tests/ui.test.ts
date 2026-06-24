@@ -45,7 +45,8 @@ const state: PublicGameState = {
     bookCode: bookCode as never,
     status: "unclaimed",
     awardedTeamIndex: null
-  }))
+  })),
+  pendingTransfer: null
 };
 
 const hand: MyHandState = {
@@ -130,6 +131,30 @@ describe("request card options", () => {
       reason: "You must hold at least one card from this set."
     });
   });
+
+  it("blocks new requests while a card is waiting for thank you", () => {
+    const options = buildRequestCardOptions({
+      hand,
+      me: players[0]!,
+      state: {
+        ...state,
+        pendingTransfer: {
+          transferId: "11111111-1111-4111-8111-111111111111",
+          fromPlayerId: "p2",
+          toPlayerId: "p1",
+          cardCode: "3C",
+          bookCode: "clubs_low",
+          status: "pending"
+        }
+      },
+      targetPlayerId: "p2"
+    });
+
+    expect(options.find((option) => option.card.code === "3C")).toMatchObject({
+      legal: false,
+      reason: "Say thank you before taking another action."
+    });
+  });
 });
 
 describe("event effects", () => {
@@ -162,6 +187,55 @@ describe("event effects", () => {
       expect.arrayContaining([
         expect.objectContaining({ kind: "transfer", fromPlayerId: "p2", toPlayerId: "p1", cardCode: "3C" }),
         expect.objectContaining({ kind: "announcement", tone: "hit", targetPlayerId: "p2", askerPlayerId: "p1" })
+      ])
+    );
+  });
+
+  it("maps thank-you pending and penalty events to table feedback", () => {
+    const pendingEvent = adaptRealtimePayload({
+      event: "card.thank_required",
+      payload: {
+        gameId: "g1",
+        version: 2,
+        event: "card.thank_required",
+        payload: {
+          transferId: "11111111-1111-4111-8111-111111111111",
+          fromPlayerId: "p2",
+          toPlayerId: "p1",
+          cardCode: "3C",
+          bookCode: "clubs_low"
+        }
+      }
+    });
+    const penaltyEvent = adaptRealtimePayload({
+      event: "card.thank_penalty",
+      payload: {
+        gameId: "g1",
+        version: 3,
+        event: "card.thank_penalty",
+        payload: {
+          transferId: "11111111-1111-4111-8111-111111111111",
+          fromPlayerId: "p2",
+          toPlayerId: "p1",
+          cardCode: "3C",
+          bookCode: "clubs_low",
+          nextTurnPlayerId: "p2",
+          playerCardCounts: { p1: 1, p2: 4 }
+        }
+      }
+    });
+
+    expect(pendingEvent?.type).toBe("card.thank_required");
+    expect(effectFromEvent(pendingEvent!)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "announcement", tone: "hit", text: expect.stringContaining("thank you") })
+      ])
+    );
+    expect(penaltyEvent?.type).toBe("card.thank_penalty");
+    expect(effectFromEvent(penaltyEvent!)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "announcement", tone: "miss" }),
+        expect.objectContaining({ kind: "turn", playerId: "p2" })
       ])
     );
   });

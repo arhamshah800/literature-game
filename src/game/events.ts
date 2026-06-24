@@ -30,10 +30,29 @@ export type CardAskedPayload = {
 };
 
 export type CardTransferredPayload = {
+  transferId?: string;
   fromPlayerId: string;
   toPlayerId: string;
   cardCode: CardCode;
   bookCode: BookCode;
+  playerCardCounts: Record<string, number>;
+};
+
+export type ThankRequiredPayload = {
+  transferId: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  cardCode: CardCode;
+  bookCode: BookCode;
+};
+
+export type ThankPenaltyPayload = {
+  transferId: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  cardCode: CardCode;
+  bookCode: BookCode;
+  nextTurnPlayerId: string;
   playerCardCounts: Record<string, number>;
 };
 
@@ -48,7 +67,7 @@ export type AskMissedPayload = {
 export type TurnChangedPayload = {
   previousTurnPlayerId: string | null;
   currentTurnPlayerId: string;
-  reason: "start" | "ask_success" | "ask_miss" | "claim";
+  reason: "start" | "ask_success" | "ask_miss" | "claim" | "empty_hand_after_claim" | "thank_penalty";
 };
 
 export type ClaimResolvedPayload = {
@@ -73,7 +92,9 @@ export type KnownGameEvent =
   | GameEvent<PlayerJoinedPayload>
   | GameEvent<GameStartedPayload>
   | GameEvent<CardAskedPayload>
+  | GameEvent<ThankRequiredPayload>
   | GameEvent<CardTransferredPayload>
+  | GameEvent<ThankPenaltyPayload>
   | GameEvent<AskMissedPayload>
   | GameEvent<TurnChangedPayload>
   | GameEvent<ClaimResolvedPayload>
