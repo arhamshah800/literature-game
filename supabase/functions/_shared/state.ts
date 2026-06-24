@@ -1,6 +1,6 @@
-import type { SqlClient } from "./db.ts";
+import type { JsonValue, SqlClient } from "./db.ts";
 
-export async function getPublicState(sql: SqlClient, gameId: string): Promise<unknown> {
+export async function getPublicState(sql: SqlClient, gameId: string): Promise<JsonValue | null> {
   const rows = await sql`
     select jsonb_build_object(
       'gameId', g.id,
@@ -81,13 +81,13 @@ export async function getPublicState(sql: SqlClient, gameId: string): Promise<un
     from public.games g
     where g.id = ${gameId}::uuid
   `;
-  return rows[0]?.state ?? null;
+  return (rows[0]?.state as JsonValue | null) ?? null;
 }
 
 export async function getMyHand(
   sql: SqlClient,
   input: { gameId: string; userId: string }
-): Promise<unknown> {
+): Promise<JsonValue | null> {
   const rows = await sql`
     select jsonb_build_object(
       'gameId', ${input.gameId}::uuid,
@@ -114,7 +114,7 @@ export async function getMyHand(
       and gp.user_id = ${input.userId}::uuid
     group by gp.id
   `;
-  return rows[0]?.hand ?? null;
+  return (rows[0]?.hand as JsonValue | null) ?? null;
 }
 
 export async function ensureProfile(

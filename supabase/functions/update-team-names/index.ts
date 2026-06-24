@@ -1,11 +1,12 @@
 import { requireUser } from "../_shared/auth.ts";
 import { createSqlClient, insertGameEvent, logAction } from "../_shared/db.ts";
+import type { JsonValue } from "../_shared/db.ts";
 import { errorResponse, handleOptions, jsonResponse, readJsonBody } from "../_shared/http.ts";
 import { getMyHand, getPublicState } from "../_shared/state.ts";
 
 type UpdateTeamNamesRequest = {
   gameId: string;
-  teamNames: Record<string, unknown>;
+  teamNames: Record<string, JsonValue>;
 };
 
 type TeamIndex = 0 | 1;

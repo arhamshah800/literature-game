@@ -2,6 +2,7 @@ import postgres from "npm:postgres@3.4.5";
 import { requireEnv } from "./http.ts";
 
 export type SqlClient = postgres.Sql;
+export type JsonValue = Parameters<SqlClient["json"]>[0];
 
 export function createSqlClient(): SqlClient {
   return postgres(requireEnv("SUPABASE_DB_URL"), {
@@ -17,7 +18,7 @@ export async function insertGameEvent(
     version: number;
     eventType: string;
     actorPlayerId: string | null;
-    payload: unknown;
+    payload: JsonValue;
   }
 ): Promise<void> {
   await sql`
@@ -59,8 +60,8 @@ export async function logAction(
     userId: string;
     playerId: string | null;
     actionType: string;
-    requestPayload: unknown;
-    responsePayload?: unknown;
+    requestPayload: JsonValue;
+    responsePayload?: JsonValue;
     requestId?: string | null;
     success: boolean;
     errorMessage?: string;

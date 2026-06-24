@@ -303,6 +303,7 @@ sequenceDiagram
 | --- | --- |
 | Node.js | CI uses Node.js 22. |
 | npm | Lockfile is present; use `npm ci` for reproducible installs. |
+| Deno | Installed through the npm `deno` dev dependency for Edge Function typechecks. |
 | Supabase CLI | Required for local Supabase, migrations, and function deployment. |
 | Supabase project | Required for hosted Auth, Postgres, Realtime, and Edge Functions. |
 | Vercel account | Required for production deployment through the included workflow. |
@@ -820,9 +821,11 @@ erDiagram
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start Vite development server. |
-| `npm run build` | Run TypeScript check and build production assets. |
+| `npm run build` | Run the app TypeScript check and build production assets. |
 | `npm run preview` | Preview the production build. |
-| `npm run typecheck` | Run `tsc --noEmit`. |
+| `npm run typecheck` | Run both app TypeScript and Supabase Edge Function typechecks. |
+| `npm run typecheck:app` | Run `tsc --noEmit` for Vite, React, shared game code, and tests. |
+| `npm run typecheck:functions` | Run `deno check` for every Supabase Edge Function entrypoint. |
 | `npm test` | Run Vitest once. |
 | `npm run test:watch` | Run Vitest in watch mode. |
 
@@ -836,6 +839,10 @@ The repository enforces strict TypeScript:
 - `forceConsistentCasingInFileNames`
 
 Shared rule logic belongs in `src/game` so both UI and backend-adjacent code can use the same card, claim, deal, team, and event types.
+
+Supabase Edge Functions run on Deno, not Vite. Changes under `supabase/functions` must pass `npm run typecheck:functions`; app-only `tsc --noEmit` intentionally excludes those files through `tsconfig.json`.
+
+Data written through `sql.json(...)`, action logs, or realtime payloads must be typed as `JsonValue` from `supabase/functions/_shared/db.ts`, not `unknown`, so Deno can catch non-serializable payloads before deployment.
 
 ### Testing
 
@@ -1028,6 +1035,7 @@ npm run build
 - No service role keys or secrets are committed.
 - Hidden card state is not exposed to public client state.
 - New game mutations are implemented through Edge Functions/private SQL, not browser table writes.
+- Edge Function changes pass `npm run typecheck:functions`, especially when touching request bodies, action logs, realtime payloads, or SQL JSON helpers.
 - RLS and grants are reviewed for any schema changes.
 - Tests cover new rules or edge cases.
 - README/API docs are updated when behavior changes.

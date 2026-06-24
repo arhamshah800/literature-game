@@ -7,15 +7,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run typecheck:app && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "npm run typecheck:app && npm run typecheck:functions",
+    "typecheck:app": "tsc --noEmit",
+    "typecheck:functions": "deno check supabase/functions/*/index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.10.2",
+    "deno": "^2.8.3",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
