@@ -55,20 +55,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Pull Vercel project settings
-        run: npx vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: Normalize Vercel secrets
+        shell: bash
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          RAW_VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          RAW_VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          RAW_VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          trim_secret() {
+            printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+          }
+
+          {
+            printf 'VERCEL_TOKEN=%s\n' "$(trim_secret "$RAW_VERCEL_TOKEN")"
+            printf 'VERCEL_ORG_ID=%s\n' "$(trim_secret "$RAW_VERCEL_ORG_ID")"
+            printf 'VERCEL_PROJECT_ID=%s\n' "$(trim_secret "$RAW_VERCEL_PROJECT_ID")"
+          } >> "$GITHUB_ENV"
+
+      - name: Pull Vercel project settings
+        run: npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Build with Vercel
-        run: npx vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy to Vercel
-        run: npx vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
