@@ -328,27 +328,40 @@ function App() {
     };
   }, [gameId, session]);
 
-  async function ensureAnonymousSession() {
+  function createGuestCredentials() {
+    const id = crypto.randomUUID();
+    return {
+      email: `guest-${id}@guest.literature-game.local`,
+      password: `Guest-${id}!A1`
+    };
+  }
+
+  async function createGuestSession() {
+    const credentials = createGuestCredentials();
+    const { data: signUpData, error: responseError } = await supabase.auth.signUp(credentials);
+    if (responseError) throw responseError;
+    if (!signUpData.session) {
+      throw new Error("Could not start a guest session.");
+    }
+    setSession(signUpData.session);
+    return signUpData.session;
+  }
+
+  async function ensureGuestSession() {
     const { data } = await supabase.auth.getSession();
     if (data.session) {
       setSession(data.session);
       return data.session;
     }
 
-    const { data: signInData, error: responseError } = await supabase.auth.signInAnonymously();
-    if (responseError) throw responseError;
-    if (!signInData.session) {
-      throw new Error("Could not start a guest session.");
-    }
-    setSession(signInData.session);
-    return signInData.session;
+    return createGuestSession();
   }
 
   async function preparePlayer() {
     const name = validateDisplayName(displayName);
     localStorage.setItem(storedNameKey, name);
     setDisplayName(name);
-    await ensureAnonymousSession();
+    await ensureGuestSession();
     return name;
   }
 
@@ -359,9 +372,7 @@ function App() {
       localStorage.removeItem(storedNameKey);
       setDisplayName("");
       await supabase.auth.signOut();
-      const { data: signInData, error: responseError } = await supabase.auth.signInAnonymously();
-      if (responseError) throw responseError;
-      setSession(signInData.session);
+      await createGuestSession();
     });
   }
 

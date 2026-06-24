@@ -27,3 +27,14 @@ verify_jwt = true
 
 [functions.update-team-names]
 verify_jwt = true
+
+[auth]
+enable_anonymous_sign_ins = false
+password_requirements = "lower_upper_letters_digits_symbols"
+
+[auth.email]
+enable_signup = true
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
