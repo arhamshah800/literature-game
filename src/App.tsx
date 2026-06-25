@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import {
   ArrowRight,
@@ -1085,4 +1085,11 @@ function DevTableDemo() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Root element not found.");
+}
+
+const windowWithRoot = window as typeof window & { literatureRoot?: Root };
+windowWithRoot.literatureRoot ??= createRoot(rootElement);
+windowWithRoot.literatureRoot.render(<App />);
